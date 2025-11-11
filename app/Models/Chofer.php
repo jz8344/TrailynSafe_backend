@@ -4,12 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Contracts\MongoSyncable;
-use App\Support\MongoSync\MongoSyncTrait;
 
-class Chofer extends Model implements MongoSyncable
+
+
+class Chofer extends Model
 {
-    use HasFactory, MongoSyncTrait;
+    use HasFactory;
 
     protected $table = 'choferes';
 

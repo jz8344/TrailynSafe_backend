@@ -112,6 +112,10 @@ Para usar Gmail:
 
 ### 5. Configurar MongoDB Atlas
 
+**IMPORTANTE**: Por defecto, la sincronización con MongoDB está deshabilitada en Railway para evitar problemas de dependencias.
+
+Si necesitas habilitar MongoDB:
+
 1. Ve a [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
 2. Crea un cluster gratuito si no tienes uno
 3. Ve a **Database Access** → crea un usuario con permisos de lectura/escritura
@@ -119,6 +123,9 @@ Para usar Gmail:
 5. En **Database** → **Connect** → copia la cadena de conexión
 6. Reemplaza `<password>` con tu contraseña real
 7. Agrega el nombre de la base de datos al final: `/trailynsafe`
+8. En Railway, configura `MONGO_SYNC_DISABLED=false` para habilitar la sincronización
+
+**Para development sin MongoDB**: Configura `MONGO_SYNC_DISABLED=true` en Railway.
 
 ### 6. Configurar el Dominio
 

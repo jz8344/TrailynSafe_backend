@@ -4,12 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Contracts\MongoSyncable;
-use App\Support\MongoSync\MongoSyncTrait;
 
-class SolicitudImpresionQr extends Model implements MongoSyncable
+class SolicitudImpresionQr extends Model
 {
-    use HasFactory, MongoSyncTrait;
+    use HasFactory;
 
     protected $table = 'solicitudes_impresion_qr';
 

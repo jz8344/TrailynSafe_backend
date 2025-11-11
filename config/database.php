@@ -44,25 +44,6 @@ return [
             'sslmode' => env('DB_SSLMODE', 'prefer'),
         ],
 
-        'mongodb' => [
-            'driver' => 'mongodb',
-            'dsn' => env('MONGO_DSN'), 
-            'host' => env('MONGO_HOST', 'localhost'),
-            'port' => env('MONGO_PORT', 27017),
-            'database' => env('MONGO_DATABASE', 'trailynsafe_replica'),
-            'username' => env('MONGO_USERNAME'),
-            'password' => env('MONGO_PASSWORD'),
-            'options' => [
-                'database' => env('MONGO_AUTH_DB', 'admin'), // auth DB
-                'ssl' => env('MONGO_SSL', true),
-                'tlsAllowInvalidCertificates' => true,
-                'tlsAllowInvalidHostnames' => true,
-                'serverSelectionTimeoutMS' => 30000,
-                'connectTimeoutMS' => 10000,
-                'socketTimeoutMS' => 300000,
-            ],
-        ],
-
     ],
 
     /*

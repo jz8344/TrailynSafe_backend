@@ -4,12 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
-use App\Contracts\MongoSyncable;
-use App\Support\MongoSync\MongoSyncTrait;
 
-class CodigoSeguridad extends Model implements MongoSyncable
+
+
+class CodigoSeguridad extends Model
 {
-    use HasFactory, MongoSyncTrait;
+    use HasFactory;
 
     protected $table = 'codigo_seguridads';
 

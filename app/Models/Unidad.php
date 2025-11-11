@@ -4,12 +4,10 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Contracts\MongoSyncable;
-use App\Support\MongoSync\MongoSyncTrait;
 
-class Unidad extends Model implements MongoSyncable
+class Unidad extends Model
 {
-    use HasFactory, MongoSyncTrait;
+    use HasFactory;
 
     protected $table = 'unidades';
 
