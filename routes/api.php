@@ -91,3 +91,4 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::post('/admin/backups/cleanup', [\App\Http\Controllers\Admin\BackupController::class, 'cleanup']);
     Route::get('/admin/backups/status', [\App\Http\Controllers\Admin\BackupController::class, 'status']);
 });
+
