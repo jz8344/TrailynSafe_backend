@@ -13,6 +13,7 @@ use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\RutaController;
 use App\Http\Controllers\EscuelaController;
 use App\Http\Controllers\ImpresionController;
+use App\Http\Controllers\BackupController;
 
 // Rutas públicas para usuarios
 Route::post('/register', [UsuarioController::class, 'register']);
@@ -92,12 +93,13 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::delete('/admin/sesiones/{id}', [SessionController::class, 'destroy']);
     Route::delete('/admin/sesiones', [SessionController::class, 'destroyAll']);
     
-    // Backup Management
-    Route::get('/admin/backups', [\App\Http\Controllers\Admin\BackupController::class, 'index']);
-    Route::post('/admin/backups', [\App\Http\Controllers\Admin\BackupController::class, 'create']);
-    Route::get('/admin/backups/{filename}/download', [\App\Http\Controllers\Admin\BackupController::class, 'download']);
-    Route::delete('/admin/backups/{filename}', [\App\Http\Controllers\Admin\BackupController::class, 'delete']);
-    Route::post('/admin/backups/cleanup', [\App\Http\Controllers\Admin\BackupController::class, 'cleanup']);
-    Route::get('/admin/backups/status', [\App\Http\Controllers\Admin\BackupController::class, 'status']);
+    // Backup Management - PostgreSQL
+    Route::get('/admin/backups/tables', [BackupController::class, 'getTables']);
+    Route::get('/admin/backups', [BackupController::class, 'index']);
+    Route::post('/admin/backups', [BackupController::class, 'create']);
+    Route::get('/admin/backups/{id}/download', [BackupController::class, 'download']);
+    Route::delete('/admin/backups/{id}', [BackupController::class, 'delete']);
+    Route::post('/admin/backups/{id}/restore', [BackupController::class, 'restore']);
+    Route::post('/admin/backups/cleanup', [BackupController::class, 'cleanup']);
 });
 
