@@ -13,11 +13,11 @@ Esta guía te ayudará a deployar tu aplicación Laravel en Railway paso a paso.
 
 Este proyecto ya incluye los siguientes archivos para Railway:
 
-- ✅ `Procfile` - Define cómo Railway ejecuta la aplicación
-- ✅ `nixpacks.toml` - Configuración de build con PHP 8.2 y extensiones necesarias
+- ✅ `Procfile` - Define cómo Railway ejecuta la aplicación (migraciones y servidor)
+- ✅ `nixpacks.toml` - Configuración de build (sin comandos que requieran DB)
 - ✅ `.railwayignore` - Archivos a excluir del deployment
 - ✅ `setup-permissions.sh` - Script para configurar permisos
-- ✅ `.env.example` - Plantilla de variables de entorno
+- ✅ `.env.example` - Plantilla de variables de entorno (sin MongoDB)
 
 ## 📝 Pasos para Deployment
 
@@ -64,14 +64,10 @@ APP_URL=https://tu-app.railway.app
 DB_CONNECTION=pgsql
 DB_SSLMODE=require
 
-# MongoDB Atlas
-MONGO_DSN=mongodb+srv://usuario:password@cluster0.xxxxx.mongodb.net/trailynsafe?retryWrites=true&w=majority&ssl=true
-MONGO_DATABASE=trailynsafe
-MONGO_AUTH_DB=admin
-MONGO_SYNC_DISABLED=false
-MONGO_SYNC_QUEUE=false
-
-# Email (Gmail)
+# Session & Cache
+SESSION_DRIVER=database
+CACHE_STORE=database
+QUEUE_CONNECTION=database
 MAIL_MAILER=smtp
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=587
@@ -112,20 +108,9 @@ Para usar Gmail:
 
 ### 5. Configurar MongoDB Atlas
 
-**IMPORTANTE**: Por defecto, la sincronización con MongoDB está deshabilitada en Railway para evitar problemas de dependencias.
+**IMPORTANTE**: MongoDB ha sido eliminado de este proyecto para simplificar el deployment en Railway.
 
-Si necesitas habilitar MongoDB:
-
-1. Ve a [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Crea un cluster gratuito si no tienes uno
-3. Ve a **Database Access** → crea un usuario con permisos de lectura/escritura
-4. Ve a **Network Access** → agrega `0.0.0.0/0` (permitir acceso desde cualquier IP)
-5. En **Database** → **Connect** → copia la cadena de conexión
-6. Reemplaza `<password>` con tu contraseña real
-7. Agrega el nombre de la base de datos al final: `/trailynsafe`
-8. En Railway, configura `MONGO_SYNC_DISABLED=false` para habilitar la sincronización
-
-**Para development sin MongoDB**: Configura `MONGO_SYNC_DISABLED=true` en Railway.
+El proyecto ahora usa **solo PostgreSQL** como base de datos principal. Todas las funcionalidades funcionan correctamente sin MongoDB.
 
 ### 6. Configurar el Dominio
 
