@@ -19,6 +19,8 @@ class Escuela extends Model
         'direccion',
         'colonia',
         'ciudad',
+        'estado_republica',
+        'municipio',
         'codigo_postal',
         'telefono',
         'correo',

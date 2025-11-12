@@ -79,6 +79,7 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::put('/admin/rutas/{id}', [RutaController::class, 'update']);
     Route::delete('/admin/rutas/{id}', [RutaController::class, 'destroy']);
     // CRUD Escuelas
+    Route::get('/admin/escuelas/search', [EscuelaController::class, 'search']);
     Route::get('/admin/escuelas', [EscuelaController::class, 'index']);
     Route::post('/admin/escuelas', [EscuelaController::class, 'store']);
     Route::get('/admin/escuelas/{id}', [EscuelaController::class, 'show']);

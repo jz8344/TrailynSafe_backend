@@ -40,6 +40,8 @@ class EscuelaController extends Controller
                 'direccion' => 'required|string',
                 'colonia' => 'nullable|string|max:255',
                 'ciudad' => 'nullable|string|max:255',
+                'estado_republica' => 'nullable|string|max:255',
+                'municipio' => 'nullable|string|max:255',
                 'codigo_postal' => 'nullable|string|max:5',
                 'telefono' => 'nullable|string|max:20',
                 'correo' => 'nullable|email|max:255',
@@ -116,6 +118,8 @@ class EscuelaController extends Controller
                 'direccion' => 'sometimes|required|string',
                 'colonia' => 'nullable|string|max:255',
                 'ciudad' => 'nullable|string|max:255',
+                'estado_republica' => 'nullable|string|max:255',
+                'municipio' => 'nullable|string|max:255',
                 'codigo_postal' => 'nullable|string|max:5',
                 'telefono' => 'nullable|string|max:20',
                 'correo' => 'nullable|email|max:255',
@@ -147,6 +151,33 @@ class EscuelaController extends Controller
             Log::error('Error al actualizar escuela: ' . $e->getMessage());
             return response()->json([
                 'error' => 'Error al actualizar la escuela',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Buscar escuelas por nombre (para autocompletado)
+     */
+    public function search(Request $request)
+    {
+        try {
+            $query = $request->input('q', '');
+            
+            if (strlen($query) < 3) {
+                return response()->json([], 200);
+            }
+
+            $escuelas = Escuela::where('nombre', 'ilike', "%{$query}%")
+                ->orderBy('nombre', 'asc')
+                ->limit(10)
+                ->get();
+
+            return response()->json($escuelas, 200);
+        } catch (\Exception $e) {
+            Log::error('Error al buscar escuelas: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al buscar escuelas',
                 'message' => $e->getMessage()
             ], 500);
         }
