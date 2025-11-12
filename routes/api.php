@@ -11,6 +11,7 @@ use App\Http\Controllers\HijoController;
 use App\Http\Controllers\ChoferController;
 use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\RutaController;
+use App\Http\Controllers\EscuelaController;
 use App\Http\Controllers\ImpresionController;
 
 // Rutas públicas para usuarios
@@ -77,6 +78,13 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::post('/admin/rutas', [RutaController::class, 'store']);
     Route::put('/admin/rutas/{id}', [RutaController::class, 'update']);
     Route::delete('/admin/rutas/{id}', [RutaController::class, 'destroy']);
+    // CRUD Escuelas
+    Route::get('/admin/escuelas', [EscuelaController::class, 'index']);
+    Route::post('/admin/escuelas', [EscuelaController::class, 'store']);
+    Route::get('/admin/escuelas/{id}', [EscuelaController::class, 'show']);
+    Route::put('/admin/escuelas/{id}', [EscuelaController::class, 'update']);
+    Route::delete('/admin/escuelas/{id}', [EscuelaController::class, 'destroy']);
+    Route::get('/admin/escuelas-activas', [EscuelaController::class, 'activas']);
     Route::post('/admin/editar-perfil', [AdminController::class, 'editarPerfil']);
     Route::post('/admin/actualizar-contrasena', [AdminController::class, 'newPassword']);
     Route::post('/admin/sesiones/cerrar-actual', [SessionController::class, 'destroyCurrent']);
