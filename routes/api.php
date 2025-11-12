@@ -21,6 +21,7 @@ Route::post('/login', [UsuarioController::class, 'login'])->name('login');
 Route::post('/cambiar-contrasena', [UsuarioController::class, 'actualizarContrasena']);
 Route::post('/enviar-codigo', [CodigoSeguridadController::class, 'enviarCodigo']);
 Route::post('/validar-codigo', [CodigoSeguridadController::class, 'validarCodigo']);
+Route::get('/escuelas-activas', [EscuelaController::class, 'activas']);
 
 // Rutas públicas para administradores
 Route::post('/admin/register', [AdminController::class, 'register']);
