@@ -14,6 +14,9 @@ use App\Http\Controllers\RutaController;
 use App\Http\Controllers\EscuelaController;
 use App\Http\Controllers\ImpresionController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\ViajeController;
+use App\Http\Controllers\ConfirmacionViajeController;
+use App\Http\Controllers\ChoferViajeController;
 
 // Rutas públicas para usuarios
 Route::post('/register', [UsuarioController::class, 'register']);
@@ -47,6 +50,12 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class]
     Route::get('/hijos', [HijoController::class, 'userIndex']);
     Route::post('/hijos', [HijoController::class, 'userStore']);
     Route::post('/solicitar-impresion-qrs', [ImpresionController::class, 'solicitar']);
+    
+    // Viajes y confirmaciones para padres
+    Route::get('/viajes/disponibles', [ConfirmacionViajeController::class, 'viajesDisponibles']);
+    Route::post('/viajes/confirmar', [ConfirmacionViajeController::class, 'confirmarViaje']);
+    Route::post('/viajes/cancelar', [ConfirmacionViajeController::class, 'cancelarConfirmacion']);
+    Route::get('/mis-confirmaciones', [ConfirmacionViajeController::class, 'misConfirmaciones']);
 });
 
 // Rutas protegidas para administradores
@@ -102,5 +111,27 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::delete('/admin/backups/{id}', [BackupController::class, 'delete']);
     Route::post('/admin/backups/{id}/restore', [BackupController::class, 'restore']);
     Route::post('/admin/backups/cleanup', [BackupController::class, 'cleanup']);
+    
+    // CRUD Viajes
+    Route::get('/admin/viajes', [ViajeController::class, 'index']);
+    Route::post('/admin/viajes', [ViajeController::class, 'store']);
+    Route::get('/admin/viajes/{id}', [ViajeController::class, 'show']);
+    Route::put('/admin/viajes/{id}', [ViajeController::class, 'update']);
+    Route::delete('/admin/viajes/{id}', [ViajeController::class, 'destroy']);
+    Route::get('/admin/viajes/hoy/list', [ViajeController::class, 'viajesHoy']);
+    Route::post('/admin/viajes/{id}/abrir-confirmaciones', [ViajeController::class, 'abrirConfirmaciones']);
+    Route::post('/admin/viajes/{id}/cerrar-confirmaciones', [ViajeController::class, 'cerrarConfirmaciones']);
+    Route::get('/admin/viajes/{id}/confirmaciones', [ViajeController::class, 'confirmaciones']);
+});
+
+// Rutas para choferes (API móvil - requiere autenticación de chofer)
+Route::prefix('chofer')->group(function () {
+    Route::get('/viajes', [ChoferViajeController::class, 'misViajes']);
+    Route::post('/viajes/{id}/iniciar', [ChoferViajeController::class, 'iniciarViaje']);
+    Route::post('/viajes/{id}/finalizar', [ChoferViajeController::class, 'finalizarViaje']);
+    Route::get('/viajes/{id}/hijos-confirmados', [ChoferViajeController::class, 'hijosConfirmados']);
+    Route::post('/escanear-qr', [ChoferViajeController::class, 'escanearQR']);
+    Route::post('/ubicacion', [ChoferViajeController::class, 'actualizarUbicacion']);
+    Route::post('/telemetria', [ChoferViajeController::class, 'registrarTelemetria']);
 });
 
