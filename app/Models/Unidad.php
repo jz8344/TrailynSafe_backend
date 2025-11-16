@@ -19,6 +19,7 @@ class Unidad extends Model
         'anio',
         'color',
         'imagen',
+        'imagen_delete_hash',
         'estado',
         'numero_serie',
         'capacidad',

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Unidad;
+use App\Support\ImgurUploader;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 
@@ -48,11 +49,21 @@ class UnidadController extends Controller
             $data['estado'] = 'activo';
         }
         
+        // Subir imagen a Imgur si se proporciona
         if ($request->hasFile('imagen')) {
-            $image = $request->file('imagen');
-            $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->move(public_path('uploads/unidades'), $imageName);
-            $data['imagen'] = 'uploads/unidades/' . $imageName;
+            $uploadResult = ImgurUploader::upload($request->file('imagen'));
+            
+            if ($uploadResult['success']) {
+                $data['imagen'] = $uploadResult['url'];
+                
+                // Guardar delete_hash si existe (para poder eliminar después)
+                if (isset($uploadResult['delete_hash'])) {
+                    $data['imagen_delete_hash'] = $uploadResult['delete_hash'];
+                }
+            } else {
+                // Si falla la subida, registrar error pero continuar sin imagen
+                \Log::warning('No se pudo subir imagen a Imgur', ['error' => $uploadResult['error']]);
+            }
         }
         
         $unidad = Unidad::create($data);
@@ -116,17 +127,25 @@ class UnidadController extends Controller
         
         \Log::info('Validated data:', $data);
         
-        // Manejar la subida de imagen
+        // Manejar la subida de imagen a Imgur
         if ($request->hasFile('imagen')) {
-            // Eliminar imagen anterior si existe
-            if ($unidad->imagen && file_exists(public_path($unidad->imagen))) {
-                unlink(public_path($unidad->imagen));
+            // Intentar eliminar imagen anterior de Imgur si existe
+            if ($unidad->imagen_delete_hash) {
+                ImgurUploader::delete($unidad->imagen_delete_hash);
             }
             
-            $image = $request->file('imagen');
-            $imageName = time() . '_' . $image->getClientOriginalName();
-            $image->move(public_path('uploads/unidades'), $imageName);
-            $data['imagen'] = 'uploads/unidades/' . $imageName;
+            // Subir nueva imagen
+            $uploadResult = ImgurUploader::upload($request->file('imagen'));
+            
+            if ($uploadResult['success']) {
+                $data['imagen'] = $uploadResult['url'];
+                
+                if (isset($uploadResult['delete_hash'])) {
+                    $data['imagen_delete_hash'] = $uploadResult['delete_hash'];
+                }
+            } else {
+                \Log::warning('No se pudo actualizar imagen en Imgur', ['error' => $uploadResult['error']]);
+            }
         } else {
             // Si no hay archivo nuevo, no actualizar el campo imagen
             unset($data['imagen']);
@@ -144,9 +163,9 @@ class UnidadController extends Controller
         $unidad = Unidad::find($id);
         if (!$unidad) return response()->json(['error' => 'No encontrada'], 404);
         
-        // Eliminar imagen si existe
-        if ($unidad->imagen && file_exists(public_path($unidad->imagen))) {
-            unlink(public_path($unidad->imagen));
+        // Intentar eliminar imagen de Imgur si existe
+        if ($unidad->imagen_delete_hash) {
+            ImgurUploader::delete($unidad->imagen_delete_hash);
         }
         
         $unidad->delete();
