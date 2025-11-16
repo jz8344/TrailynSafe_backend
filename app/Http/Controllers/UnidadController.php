@@ -15,20 +15,30 @@ class UnidadController extends Controller
 
     public function store(Request $request)
     {
+        // Log para debug
+        \Log::info('Store request received:', [
+            'data' => $request->all(),
+            'files' => $request->files->all()
+        ]);
+        
         $validator = Validator::make($request->all(), [
             'matricula' => 'required|string|unique:unidades,matricula',
-            'descripcion' => 'nullable|string|max:255',
+            'descripcion' => 'nullable|string|max:500',
             'marca' => 'nullable|string|max:100',
             'modelo' => 'nullable|string|max:100',
             'anio' => 'nullable|integer|min:1900|max:' . (date('Y') + 1),
             'color' => 'nullable|string|max:50',
-            'imagen' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:2048',
+            'imagen' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:5120',
             'estado' => 'nullable|in:activo,en_ruta,mantenimiento,inactivo',
             'numero_serie' => 'nullable|string|max:100',
             'capacidad' => 'required|integer|min:1',
         ]);
         
         if ($validator->fails()) {
+            \Log::error('Validation failed for unidad creation:', [
+                'data' => $request->all(),
+                'errors' => $validator->errors()
+            ]);
             return response()->json($validator->errors(), 422);
         }
 
