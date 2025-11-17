@@ -17,7 +17,6 @@ class ConfirmacionViajeController extends Controller
     /**
      * Obtener viajes disponibles para un usuario (padre)
      * Basado en las escuelas de sus hijos
-     * Updated: 2025-11-16 22:37
      */
     public function viajesDisponibles(Request $request)
     {
@@ -31,23 +30,22 @@ class ConfirmacionViajeController extends Controller
                 ], 401);
             }
 
-            // Obtener los hijos del usuario con sus escuelas
-            $hijos = Hijo::with('escuela')->where('padre_id', $usuario->id)->get();
+            // Obtener los hijos del usuario
+            $hijos = Hijo::where('padre_id', $usuario->id)->get();
             
-            // Recopilar IDs de escuelas (tanto del campo escuela_id como buscando por nombre)
+            if ($hijos->isEmpty()) {
+                return response()->json([
+                    'success' => true,
+                    'data' => []
+                ], 200);
+            }
+            
+            // Recopilar IDs de escuelas
             $escuelaIds = collect();
             
             foreach ($hijos as $hijo) {
                 if ($hijo->escuela_id) {
-                    // Si tiene escuela_id, agregarlo
                     $escuelaIds->push($hijo->escuela_id);
-                } elseif ($hijo->getAttributes()['escuela'] ?? null) {
-                    // Si solo tiene el nombre de la escuela en texto (campo legacy), buscar la escuela
-                    $escuelaNombre = $hijo->getAttributes()['escuela'];
-                    $escuela = Escuela::where('nombre', 'like', '%' . $escuelaNombre . '%')->first();
-                    if ($escuela) {
-                        $escuelaIds->push($escuela->id);
-                    }
                 }
             }
             
