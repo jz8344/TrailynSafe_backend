@@ -30,7 +30,7 @@ class ConfirmacionViajeController extends Controller
             }
 
             // Obtener las escuelas de los hijos del usuario
-            $hijos = Hijo::where('usuario_id', $usuario->id)->get();
+            $hijos = Hijo::where('padre_id', $usuario->id)->get();
             $escuelaIds = $hijos->pluck('escuela_id')->unique();
 
             // Obtener viajes activos para esas escuelas
@@ -102,7 +102,7 @@ class ConfirmacionViajeController extends Controller
 
             // Verificar que el hijo pertenece al usuario
             $hijo = Hijo::where('id', $request->hijo_id)
-                ->where('usuario_id', $usuario->id)
+                ->where('padre_id', $usuario->id)
                 ->first();
 
             if (!$hijo) {
@@ -219,7 +219,7 @@ class ConfirmacionViajeController extends Controller
 
             // Verificar que el hijo pertenece al usuario
             $hijo = Hijo::where('id', $request->hijo_id)
-                ->where('usuario_id', $usuario->id)
+                ->where('padre_id', $usuario->id)
                 ->first();
 
             if (!$hijo) {
