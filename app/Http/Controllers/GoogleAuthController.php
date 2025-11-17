@@ -47,7 +47,6 @@ class GoogleAuthController extends Controller
             // Extraer información del usuario de Google
             $googleId = $payload['sub'] ?? null;
             $email = $payload['email'] ?? null;
-            $telefono = $request->telefono ?? null;
             $name = $payload['name'] ?? '';
             $givenName = $payload['given_name'] ?? '';
             $familyName = $payload['family_name'] ?? '';
@@ -58,7 +57,6 @@ class GoogleAuthController extends Controller
                 'googleId' => $googleId,
                 'email' => $email,
                 'name' => $name,
-                'telefono' => $telefono,
                 'emailVerified' => $emailVerified
             ]);
 
@@ -80,7 +78,7 @@ class GoogleAuthController extends Controller
                     'apellidos' => $familyName ?: (explode(' ', $name)[1] ?? ''),
                     'correo' => $email,
                     'contrasena' => Hash::make(Str::random(32)), // Password aleatorio
-                    'telefono' => $request->telefono ?? null,
+                    'telefono' => '',
                     'rol' => 'usuario',
                     'google_id' => $googleId,
                     'avatar' => $picture,
