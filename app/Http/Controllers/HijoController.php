@@ -83,7 +83,7 @@ class HijoController extends Controller
             'nombre' => 'required|string|max:255',
             'grado' => 'required|string|max:2',
             'grupo' => 'required|string|max:1',
-            'escuela' => 'required|string|max:255',
+            'escuela_id' => 'required|exists:escuelas,id',
             'codigo_qr' => 'required|string|unique:hijos,codigo_qr',
             'emergencia_1' => 'nullable|string|max:25',
             'emergencia_2' => 'nullable|string|max:25',
@@ -97,6 +97,6 @@ class HijoController extends Controller
         $data['padre_id'] = $user->id;
 
         $hijo = Hijo::create($data);
-        return response()->json($hijo, 201);
+        return response()->json($hijo->load('escuela'), 201);
     }
 }
