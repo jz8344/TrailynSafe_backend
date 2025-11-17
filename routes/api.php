@@ -5,6 +5,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\MultaController;
 use App\Http\Controllers\SessionController;
 use App\Http\Controllers\CodigoSeguridadController;
+use App\Http\Controllers\GoogleAuthController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\HijoController;
@@ -25,6 +26,9 @@ Route::post('/cambiar-contrasena', [UsuarioController::class, 'actualizarContras
 Route::post('/enviar-codigo', [CodigoSeguridadController::class, 'enviarCodigo']);
 Route::post('/validar-codigo', [CodigoSeguridadController::class, 'validarCodigo']);
 Route::get('/escuelas-activas', [EscuelaController::class, 'activas']);
+
+// Rutas de autenticación con Google
+Route::post('/auth/google', [GoogleAuthController::class, 'loginWithGoogle']);
 
 // Rutas públicas para administradores
 Route::post('/admin/register', [AdminController::class, 'register']);
@@ -50,6 +54,9 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class]
     Route::get('/hijos', [HijoController::class, 'userIndex']);
     Route::post('/hijos', [HijoController::class, 'userStore']);
     Route::post('/solicitar-impresion-qrs', [ImpresionController::class, 'solicitar']);
+    
+    // Google Auth - Desconectar cuenta
+    Route::post('/auth/google/disconnect', [GoogleAuthController::class, 'disconnectGoogle']);
     
     // Viajes y confirmaciones para padres
     Route::get('/viajes/disponibles', [ConfirmacionViajeController::class, 'viajesDisponibles']);

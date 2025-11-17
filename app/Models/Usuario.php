@@ -21,6 +21,10 @@ class Usuario extends Authenticatable
         'rol', 
         'have_son',
         'fecha_registro',
+        'google_id',
+        'avatar',
+        'auth_provider',
+        'email_verified',
     ];
 
     public function getAuthPassword()
