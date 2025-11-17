@@ -59,24 +59,33 @@ class ViajeController extends Controller
      */
     public function store(Request $request)
     {
+        // Log para debug
+        \Log::info('Creating viaje with data:', $request->all());
+        
         $validator = Validator::make($request->all(), [
             'nombre_ruta' => 'required|string|max:255',
             'escuela_id' => 'required|exists:escuelas,id',
             'chofer_id' => 'nullable|exists:choferes,id',
             'unidad_id' => 'nullable|exists:unidades,id',
-            'hora_inicio_confirmacion' => 'required|date_format:H:i',
-            'hora_fin_confirmacion' => 'required|date_format:H:i|after:hora_inicio_confirmacion',
-            'hora_inicio_viaje' => 'required|date_format:H:i|after:hora_fin_confirmacion',
-            'hora_llegada_estimada' => 'required|date_format:H:i|after:hora_inicio_viaje',
+            'hora_inicio_confirmacion' => 'required|date_format:H:i:s',
+            'hora_fin_confirmacion' => 'required|date_format:H:i:s',
+            'hora_inicio_viaje' => 'required|date_format:H:i:s',
+            'hora_llegada_estimada' => 'required|date_format:H:i:s',
             'fecha_viaje' => 'required|date|after_or_equal:today',
             'notas' => 'nullable|string',
             'capacidad_maxima' => 'nullable|integer|min:1'
         ]);
 
         if ($validator->fails()) {
+            \Log::error('Validation failed for viaje:', [
+                'errors' => $validator->errors(),
+                'data' => $request->all()
+            ]);
+            
             return response()->json([
                 'success' => false,
-                'errors' => $validator->errors()
+                'errors' => $validator->errors(),
+                'message' => 'Error de validación: ' . $validator->errors()->first()
             ], 422);
         }
 
@@ -154,10 +163,10 @@ class ViajeController extends Controller
             'escuela_id' => 'sometimes|exists:escuelas,id',
             'chofer_id' => 'nullable|exists:choferes,id',
             'unidad_id' => 'nullable|exists:unidades,id',
-            'hora_inicio_confirmacion' => 'sometimes|date_format:H:i',
-            'hora_fin_confirmacion' => 'sometimes|date_format:H:i',
-            'hora_inicio_viaje' => 'sometimes|date_format:H:i',
-            'hora_llegada_estimada' => 'sometimes|date_format:H:i',
+            'hora_inicio_confirmacion' => 'sometimes|date_format:H:i:s',
+            'hora_fin_confirmacion' => 'sometimes|date_format:H:i:s',
+            'hora_inicio_viaje' => 'sometimes|date_format:H:i:s',
+            'hora_llegada_estimada' => 'sometimes|date_format:H:i:s',
             'fecha_viaje' => 'sometimes|date',
             'estado' => 'sometimes|in:pendiente,confirmaciones_abiertas,confirmaciones_cerradas,en_curso,completado,cancelado',
             'notas' => 'nullable|string',
