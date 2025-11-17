@@ -41,12 +41,14 @@ class HijoController extends Controller
     {
         $hijo = Hijo::find($id);
         if (!$hijo) return response()->json(['error' => 'No encontrado'], 404);
-        $validator = Validator::make($request->all(), [
+        // Remover codigo_qr del request si se intenta modificar
+        $data = $request->except(['codigo_qr']);
+        
+        $validator = Validator::make($data, [
             'nombre' => 'sometimes|string',
             'grado' => 'sometimes|nullable|string',
             'grupo' => 'sometimes|nullable|string',
             'escuela_id' => 'sometimes|nullable|exists:escuelas,id',
-            'codigo_qr' => 'sometimes|string|unique:hijos,codigo_qr,' . $hijo->id,
             'padre_id' => 'sometimes|exists:usuarios,id',
         ]);
         if ($validator->fails()) {
