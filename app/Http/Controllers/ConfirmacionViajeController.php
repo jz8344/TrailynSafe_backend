@@ -31,16 +31,21 @@ class ConfirmacionViajeController extends Controller
 
             // Obtener las escuelas de los hijos del usuario
             $hijos = Hijo::where('padre_id', $usuario->id)->get();
-            $escuelaIds = $hijos->pluck('escuela_id')->unique();
+            \Log::info('Hijos del usuario:', ['usuario_id' => $usuario->id, 'hijos' => $hijos->toArray()]);
+            
+            $escuelaIds = $hijos->pluck('escuela_id')->filter()->unique()->values();
+            \Log::info('Escuelas de los hijos:', ['escuela_ids' => $escuelaIds->toArray()]);
 
-            // Obtener viajes activos para esas escuelas
+            // Obtener viajes activos para esas escuelas (incluye hasta 7 días atrás para pruebas)
             $viajes = Viaje::with(['escuela', 'chofer', 'unidad'])
                 ->whereIn('escuela_id', $escuelaIds)
                 ->whereIn('estado', ['confirmaciones_abiertas', 'confirmaciones_cerradas', 'en_curso'])
-                ->whereDate('fecha_viaje', '>=', today())
+                ->whereDate('fecha_viaje', '>=', now()->subDays(7))
                 ->orderBy('fecha_viaje', 'asc')
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
+            
+            \Log::info('Viajes encontrados:', ['count' => $viajes->count(), 'viajes' => $viajes->toArray()]);
 
             // Agregar información de confirmación para cada hijo
             $viajesConEstado = $viajes->map(function($viaje) use ($hijos) {
@@ -54,7 +59,7 @@ class ConfirmacionViajeController extends Controller
 
                         $viaje->hijos_confirmados[] = [
                             'hijo_id' => $hijo->id,
-                            'hijo_nombre' => $hijo->nombre . ' ' . $hijo->apellidos,
+                            'hijo_nombre' => $hijo->nombre,
                             'confirmado' => $confirmacion ? true : false,
                             'estado' => $confirmacion ? $confirmacion->estado : null,
                             'puede_confirmar' => $viaje->estado === 'confirmaciones_abiertas' && !$confirmacion
