@@ -10,7 +10,7 @@ class HijoController extends Controller
 {
     public function index()
     {
-        return response()->json(Hijo::with('padre')->orderByDesc('id')->get());
+        return response()->json(Hijo::with(['padre', 'escuela'])->orderByDesc('id')->get());
     }
 
     public function store(Request $request)
@@ -19,6 +19,7 @@ class HijoController extends Controller
             'nombre' => 'required|string',
             'grado' => 'nullable|string',
             'grupo' => 'nullable|string',
+            'escuela_id' => 'nullable|exists:escuelas,id',
             'codigo_qr' => 'required|string|unique:hijos,codigo_qr',
             'padre_id' => 'required|exists:usuarios,id',
         ]);
@@ -26,12 +27,12 @@ class HijoController extends Controller
             return response()->json($validator->errors(), 422);
         }
         $hijo = Hijo::create($validator->validated());
-        return response()->json($hijo->load('padre'), 201);
+        return response()->json($hijo->load(['padre', 'escuela']), 201);
     }
 
     public function show($id)
     {
-        $hijo = Hijo::with('padre')->find($id);
+        $hijo = Hijo::with(['padre', 'escuela'])->find($id);
         if (!$hijo) return response()->json(['error' => 'No encontrado'], 404);
         return response()->json($hijo);
     }
@@ -44,6 +45,7 @@ class HijoController extends Controller
             'nombre' => 'sometimes|string',
             'grado' => 'sometimes|nullable|string',
             'grupo' => 'sometimes|nullable|string',
+            'escuela_id' => 'sometimes|nullable|exists:escuelas,id',
             'codigo_qr' => 'sometimes|string|unique:hijos,codigo_qr,' . $hijo->id,
             'padre_id' => 'sometimes|exists:usuarios,id',
         ]);
@@ -51,7 +53,7 @@ class HijoController extends Controller
             return response()->json($validator->errors(), 422);
         }
         $hijo->update($validator->validated());
-        return response()->json($hijo->fresh()->load('padre'));
+        return response()->json($hijo->fresh()->load(['padre', 'escuela']));
     }
 
     public function destroy($id)

@@ -18,14 +18,20 @@ class Hijo extends Model
         'grado',
         'grupo',
         'escuela',
+        'escuela_id',
         'codigo_qr',
         'padre_id',
-    'emergencia_1',
-    'emergencia_2',
+        'emergencia_1',
+        'emergencia_2',
     ];
 
     public function padre()
     {
         return $this->belongsTo(Usuario::class, 'padre_id');
+    }
+
+    public function escuela()
+    {
+        return $this->belongsTo(Escuela::class, 'escuela_id');
     }
 }
