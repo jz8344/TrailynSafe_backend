@@ -66,9 +66,9 @@ class GoogleAuthController extends Controller
                 // Crear nuevo usuario
                 $usuario = Usuario::create([
                     'nombre' => $givenName ?: explode(' ', $name)[0],
-                    'apellido' => $familyName ?: (explode(' ', $name)[1] ?? ''),
+                    'apellidos' => $familyName ?: (explode(' ', $name)[1] ?? ''),
                     'correo' => $email,
-                    'password' => Hash::make(Str::random(32)), // Password aleatorio
+                    'contrasena' => Hash::make(Str::random(32)), // Password aleatorio
                     'telefono' => '',
                     'rol' => 'usuario',
                     'google_id' => $googleId,
@@ -102,7 +102,7 @@ class GoogleAuthController extends Controller
                     'usuario' => [
                         'id' => $usuario->id,
                         'nombre' => $usuario->nombre,
-                        'apellido' => $usuario->apellido,
+                        'apellido' => $usuario->apellidos,
                         'correo' => $usuario->correo,
                         'telefono' => $usuario->telefono,
                         'rol' => $usuario->rol,
