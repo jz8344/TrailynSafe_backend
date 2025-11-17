@@ -31,10 +31,49 @@ class ConfirmacionViajeController extends Controller
 
             // Obtener las escuelas de los hijos del usuario
             $hijos = Hijo::where('padre_id', $usuario->id)->get();
-            \Log::info('Hijos del usuario:', ['usuario_id' => $usuario->id, 'hijos' => $hijos->toArray()]);
+            \Log::info('DEBUG viajesDisponibles - Usuario y sus hijos:', [
+                'usuario_id' => $usuario->id,
+                'usuario_correo' => $usuario->correo,
+                'hijos_count' => $hijos->count(),
+                'hijos' => $hijos->map(function($h) {
+                    return [
+                        'id' => $h->id,
+                        'nombre' => $h->nombre,
+                        'escuela_id' => $h->escuela_id,
+                        'padre_id' => $h->padre_id
+                    ];
+                })
+            ]);
             
             $escuelaIds = $hijos->pluck('escuela_id')->filter()->unique()->values();
-            \Log::info('Escuelas de los hijos:', ['escuela_ids' => $escuelaIds->toArray()]);
+            \Log::info('DEBUG - Escuelas filtradas:', [
+                'escuela_ids' => $escuelaIds->toArray(),
+                'ids_count' => $escuelaIds->count()
+            ]);
+
+            if ($escuelaIds->isEmpty()) {
+                \Log::warning('DEBUG - No hay escuelas para buscar viajes');
+                return response()->json([
+                    'success' => true,
+                    'data' => [],
+                    'debug_message' => 'Los hijos no tienen escuelas asignadas'
+                ], 200);
+            }
+
+            // Buscar TODOS los viajes primero (sin filtros)
+            $todosViajes = Viaje::with(['escuela', 'chofer', 'unidad'])->get();
+            \Log::info('DEBUG - Todos los viajes en BD:', [
+                'total' => $todosViajes->count(),
+                'viajes' => $todosViajes->map(function($v) {
+                    return [
+                        'id' => $v->id,
+                        'nombre_ruta' => $v->nombre_ruta,
+                        'escuela_id' => $v->escuela_id,
+                        'estado' => $v->estado,
+                        'fecha_viaje' => $v->fecha_viaje
+                    ];
+                })
+            ]);
 
             // Obtener viajes activos para esas escuelas (incluye hasta 7 días atrás para pruebas)
             $viajes = Viaje::with(['escuela', 'chofer', 'unidad'])
@@ -45,7 +84,10 @@ class ConfirmacionViajeController extends Controller
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
             
-            \Log::info('Viajes encontrados:', ['count' => $viajes->count(), 'viajes' => $viajes->toArray()]);
+            \Log::info('DEBUG - Viajes filtrados:', [
+                'count' => $viajes->count(),
+                'viajes' => $viajes->toArray()
+            ]);
 
             // Agregar información de confirmación para cada hijo
             $viajesConEstado = $viajes->map(function($viaje) use ($hijos) {
