@@ -19,6 +19,9 @@ class GoogleAuthController extends Controller
     public function loginWithGoogle(Request $request)
     {
         try {
+            \Log::info('=== Inicio Google Auth ===');
+            \Log::info('Request data', $request->all());
+            
             $request->validate([
                 'id_token' => 'required|string',
                 'device_name' => 'string|nullable'
@@ -26,11 +29,14 @@ class GoogleAuthController extends Controller
 
             $idToken = $request->id_token;
             $deviceName = $request->device_name ?? 'android-device';
+            
+            \Log::info('ID Token recibido (primeros 50 chars): ' . substr($idToken, 0, 50) . '...');
 
             // Validar el token con Google
             $payload = $this->verifyGoogleToken($idToken);
 
             if (!$payload) {
+                \Log::error('Token de Google inválido o no pudo ser verificado');
                 return response()->json([
                     'success' => false,
                     'message' => 'Token de Google inválido'
@@ -108,13 +114,24 @@ class GoogleAuthController extends Controller
                 ]
             ], 200);
 
+        } catch (\Illuminate\Validation\ValidationException $e) {
+            \Log::error('Validation error en Google Auth', ['errors' => $e->errors()]);
+            return response()->json([
+                'success' => false,
+                'message' => 'Datos de entrada inválidos',
+                'errors' => $e->errors()
+            ], 422);
+            
         } catch (\Exception $e) {
-            \Log::error('Error en Google Auth: ' . $e->getMessage());
+            \Log::error('=== Error en Google Auth ===');
+            \Log::error('Message: ' . $e->getMessage());
+            \Log::error('File: ' . $e->getFile() . ':' . $e->getLine());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             
             return response()->json([
                 'success' => false,
                 'message' => 'Error al procesar la autenticación con Google',
-                'error' => $e->getMessage()
+                'error' => config('app.debug') ? $e->getMessage() : 'Error interno del servidor'
             ], 500);
         }
     }
@@ -128,6 +145,8 @@ class GoogleAuthController extends Controller
     private function verifyGoogleToken($idToken)
     {
         try {
+            \Log::info('Verificando Google token...');
+            
             // Método 1: Validación usando Google API Client (recomendado en producción)
             // Descomentar si instalas google/apiclient
             /*
@@ -136,32 +155,69 @@ class GoogleAuthController extends Controller
             return $payload;
             */
 
-            // Método 2: Validación manual usando endpoint de Google (alternativa sin librería)
+            // Método 2: Validación manual usando endpoint de Google con cURL
             $url = 'https://oauth2.googleapis.com/tokeninfo?id_token=' . $idToken;
-            $response = file_get_contents($url);
+            
+            $ch = curl_init();
+            curl_setopt($ch, CURLOPT_URL, $url);
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+            curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+            
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $curlError = curl_error($ch);
+            curl_close($ch);
+            
+            if ($curlError) {
+                \Log::error('cURL error al verificar token: ' . $curlError);
+                return false;
+            }
+            
+            if ($httpCode !== 200) {
+                \Log::error('Google tokeninfo HTTP error: ' . $httpCode);
+                \Log::error('Response: ' . $response);
+                return false;
+            }
             
             if (!$response) {
+                \Log::error('Empty response from Google tokeninfo');
                 return false;
             }
 
             $payload = json_decode($response, true);
+            
+            if (!$payload) {
+                \Log::error('Failed to decode JSON response from Google');
+                return false;
+            }
+            
+            \Log::info('Token payload received', ['email' => $payload['email'] ?? 'N/A']);
 
             // Verificar que el token sea para tu aplicación
             $clientId = env('GOOGLE_CLIENT_ID');
-            if (isset($payload['aud']) && $payload['aud'] === $clientId) {
-                return $payload;
-            }
-
-            // También verificar si es el Web Client ID
             $webClientId = env('GOOGLE_WEB_CLIENT_ID');
-            if (isset($payload['aud']) && $payload['aud'] === $webClientId) {
-                return $payload;
+            
+            \Log::info('Verificando audience', [
+                'token_aud' => $payload['aud'] ?? 'N/A',
+                'expected_client_id' => $clientId,
+                'expected_web_client_id' => $webClientId
+            ]);
+            
+            if (isset($payload['aud'])) {
+                if ($payload['aud'] === $clientId || $payload['aud'] === $webClientId) {
+                    \Log::info('Token válido - audience match');
+                    return $payload;
+                }
             }
-
+            
+            \Log::error('Token audience no coincide con los Client IDs configurados');
             return false;
 
         } catch (\Exception $e) {
-            \Log::error('Error verificando Google token: ' . $e->getMessage());
+            \Log::error('Exception verificando Google token: ' . $e->getMessage());
+            \Log::error('Stack trace: ' . $e->getTraceAsString());
             return false;
         }
     }
