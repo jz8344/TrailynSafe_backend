@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Usuario;
+use App\Models\Sesion;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -107,7 +108,22 @@ class GoogleAuthController extends Controller
             try {
                 $tokenResult = $usuario->createToken($deviceName);
                 $token = $tokenResult->plainTextToken;
-                \Log::info('Token creado exitosamente', ['token_id' => $tokenResult->accessToken->id]);
+                $tokenId = $tokenResult->accessToken->id;
+                \Log::info('Token creado exitosamente', ['token_id' => $tokenId]);
+                
+                // Registrar la sesión en la tabla sesiones (igual que login normal)
+                Sesion::create([
+                    'usuario_id' => $usuario->id,
+                    'token'      => $token,
+                    'token_id'   => $tokenId,
+                    'user_agent' => $request->header('User-Agent'),
+                    'ip_address' => $request->ip(),
+                    'inicio'     => now(),
+                    'estado'     => 'activa',
+                ]);
+                
+                \Log::info('Sesión registrada en tabla sesiones', ['token_id' => $tokenId]);
+                
             } catch (\Exception $e) {
                 \Log::error('Error creando token Sanctum: ' . $e->getMessage());
                 throw $e;
