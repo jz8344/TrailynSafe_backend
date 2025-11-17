@@ -41,9 +41,10 @@ class ConfirmacionViajeController extends Controller
                 if ($hijo->escuela_id) {
                     // Si tiene escuela_id, agregarlo
                     $escuelaIds->push($hijo->escuela_id);
-                } elseif ($hijo->escuela) {
-                    // Si solo tiene el nombre de la escuela en texto, buscar la escuela
-                    $escuela = Escuela::where('nombre', 'like', '%' . $hijo->escuela . '%')->first();
+                } elseif ($hijo->getAttributes()['escuela'] ?? null) {
+                    // Si solo tiene el nombre de la escuela en texto (campo legacy), buscar la escuela
+                    $escuelaNombre = $hijo->getAttributes()['escuela'];
+                    $escuela = Escuela::where('nombre', 'like', '%' . $escuelaNombre . '%')->first();
                     if ($escuela) {
                         $escuelaIds->push($escuela->id);
                     }
