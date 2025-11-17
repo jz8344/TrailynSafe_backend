@@ -50,7 +50,14 @@ class GoogleAuthController extends Controller
             $givenName = $payload['given_name'] ?? '';
             $familyName = $payload['family_name'] ?? '';
             $picture = $payload['picture'] ?? null;
-            $emailVerified = $payload['email_verified'] ?? false;
+            $emailVerified = filter_var($payload['email_verified'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            
+            \Log::info('Datos extraídos del token', [
+                'googleId' => $googleId,
+                'email' => $email,
+                'name' => $name,
+                'emailVerified' => $emailVerified
+            ]);
 
             if (!$email || !$googleId) {
                 return response()->json([
@@ -61,6 +68,7 @@ class GoogleAuthController extends Controller
 
             // Buscar o crear usuario
             $usuario = Usuario::where('correo', $email)->first();
+            \Log::info('Usuario existente: ' . ($usuario ? 'SÍ (ID: '.$usuario->id.')' : 'NO'));
 
             if (!$usuario) {
                 // Crear nuevo usuario
@@ -76,6 +84,8 @@ class GoogleAuthController extends Controller
                     'email_verified' => $emailVerified,
                     'auth_provider' => 'google'
                 ]);
+                
+                \Log::info('Nuevo usuario creado', ['id' => $usuario->id, 'email' => $usuario->correo]);
 
                 $isNewUser = true;
             } else {
@@ -92,7 +102,16 @@ class GoogleAuthController extends Controller
             }
 
             // Crear token de Sanctum
-            $token = $usuario->createToken($deviceName)->plainTextToken;
+            \Log::info('Creando token Sanctum para usuario', ['id' => $usuario->id, 'device' => $deviceName]);
+            
+            try {
+                $tokenResult = $usuario->createToken($deviceName);
+                $token = $tokenResult->plainTextToken;
+                \Log::info('Token creado exitosamente', ['token_id' => $tokenResult->accessToken->id]);
+            } catch (\Exception $e) {
+                \Log::error('Error creando token Sanctum: ' . $e->getMessage());
+                throw $e;
+            }
 
             return response()->json([
                 'success' => true,
