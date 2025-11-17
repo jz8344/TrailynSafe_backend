@@ -77,7 +77,7 @@ class ConfirmacionViajeController extends Controller
 
             \Log::info('Step 5: Procesando confirmaciones');
             $viajesConEstado = $viajes->map(function($viaje) use ($hijos) {
-                $viaje->hijos_confirmados = [];
+                $hijosConfirmados = [];
                 
                 foreach ($hijos as $hijo) {
                     if ($hijo->escuela_id == $viaje->escuela_id) {
@@ -85,7 +85,7 @@ class ConfirmacionViajeController extends Controller
                             ->where('hijo_id', $hijo->id)
                             ->first();
 
-                        $viaje->hijos_confirmados[] = [
+                        $hijosConfirmados[] = [
                             'hijo_id' => $hijo->id,
                             'hijo_nombre' => $hijo->nombre,
                             'confirmado' => $confirmacion ? true : false,
@@ -95,6 +95,7 @@ class ConfirmacionViajeController extends Controller
                     }
                 }
                 
+                $viaje->hijos_confirmados = $hijosConfirmados;
                 return $viaje;
             });
 
