@@ -17,6 +17,7 @@ class ConfirmacionViajeController extends Controller
     /**
      * Obtener viajes disponibles para un usuario (padre)
      * Basado en las escuelas de sus hijos
+     * Updated: 2025-11-16 22:37
      */
     public function viajesDisponibles(Request $request)
     {
