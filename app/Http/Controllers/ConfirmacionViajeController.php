@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ConfirmacionViaje;
 use App\Models\Viaje;
 use App\Models\Hijo;
+use App\Models\Escuela;
 use App\Models\Usuario;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
