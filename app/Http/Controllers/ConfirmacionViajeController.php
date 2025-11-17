@@ -59,8 +59,7 @@ class ConfirmacionViajeController extends Controller
             }
 
             // Obtener viajes activos para esas escuelas
-            $viajes = Viaje::with(['escuela', 'chofer', 'unidad'])
-                ->whereIn('escuela_id', $escuelaIds)
+            $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->whereIn('estado', ['confirmaciones_abiertas', 'confirmaciones_cerradas', 'en_curso'])
                 ->whereDate('fecha_viaje', '>=', now()->subDays(7))
                 ->orderBy('fecha_viaje', 'asc')
