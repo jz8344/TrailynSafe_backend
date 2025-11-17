@@ -41,19 +41,21 @@ class HijoController extends Controller
     {
         $hijo = Hijo::find($id);
         if (!$hijo) return response()->json(['error' => 'No encontrado'], 404);
-        // Remover codigo_qr del request si se intenta modificar
-        $data = $request->except(['codigo_qr']);
         
-        $validator = Validator::make($data, [
+        $validator = Validator::make($request->all(), [
             'nombre' => 'sometimes|string',
             'grado' => 'sometimes|nullable|string',
             'grupo' => 'sometimes|nullable|string',
             'escuela_id' => 'sometimes|nullable|exists:escuelas,id',
             'padre_id' => 'sometimes|exists:usuarios,id',
+            // codigo_qr no se incluye en la validación, por lo que será ignorado
         ]);
+        
         if ($validator->fails()) {
             return response()->json($validator->errors(), 422);
         }
+        
+        // Solo actualizar los campos validados (excluyendo codigo_qr automáticamente)
         $hijo->update($validator->validated());
         return response()->json($hijo->fresh()->load(['padre', 'escuela']));
     }
