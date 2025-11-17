@@ -71,7 +71,7 @@ class ViajeController extends Controller
             'hora_fin_confirmacion' => 'required|date_format:H:i:s',
             'hora_inicio_viaje' => 'required|date_format:H:i:s',
             'hora_llegada_estimada' => 'required|date_format:H:i:s',
-            'fecha_viaje' => 'required|date|after_or_equal:today',
+            'fecha_viaje' => 'required|date|after_or_equal:yesterday',
             'notas' => 'nullable|string',
             'capacidad_maxima' => 'nullable|integer|min:1'
         ]);
