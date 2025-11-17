@@ -20,27 +20,33 @@ class ConfirmacionViajeController extends Controller
      */
     public function viajesDisponibles(Request $request)
     {
+        \Log::info('=== INICIO viajesDisponibles ===');
         try {
+            \Log::info('Step 1: Obteniendo usuario');
             $usuario = Auth::guard('sanctum')->user();
+            \Log::info('Usuario obtenido', ['usuario_id' => $usuario?->id]);
             
             if (!$usuario) {
+                \Log::warning('Usuario no autenticado');
                 return response()->json([
                     'success' => false,
                     'message' => 'Usuario no autenticado'
                 ], 401);
             }
 
-            // Obtener los hijos del usuario
+            \Log::info('Step 2: Obteniendo hijos del usuario');
             $hijos = Hijo::where('padre_id', $usuario->id)->get();
+            \Log::info('Hijos obtenidos', ['count' => $hijos->count(), 'hijos' => $hijos->pluck('id', 'nombre')]);
             
             if ($hijos->isEmpty()) {
+                \Log::info('Usuario no tiene hijos, retornando array vacío');
                 return response()->json([
                     'success' => true,
                     'data' => []
                 ], 200);
             }
             
-            // Recopilar IDs de escuelas
+            \Log::info('Step 3: Recopilando IDs de escuelas');
             $escuelaIds = collect();
             
             foreach ($hijos as $hijo) {
@@ -50,23 +56,26 @@ class ConfirmacionViajeController extends Controller
             }
             
             $escuelaIds = $escuelaIds->filter()->unique()->values();
+            \Log::info('Escuelas recopiladas', ['escuela_ids' => $escuelaIds->toArray()]);
 
             if ($escuelaIds->isEmpty()) {
+                \Log::info('No hay escuelas asignadas, retornando array vacío');
                 return response()->json([
                     'success' => true,
                     'data' => []
                 ], 200);
             }
 
-            // Obtener viajes activos para esas escuelas
+            \Log::info('Step 4: Buscando viajes');
             $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->whereIn('estado', ['confirmaciones_abiertas', 'confirmaciones_cerradas', 'en_curso'])
                 ->whereDate('fecha_viaje', '>=', now()->subDays(7))
                 ->orderBy('fecha_viaje', 'asc')
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
+            \Log::info('Viajes encontrados', ['count' => $viajes->count()]);
 
-            // Agregar información de confirmación para cada hijo
+            \Log::info('Step 5: Procesando confirmaciones');
             $viajesConEstado = $viajes->map(function($viaje) use ($hijos) {
                 $viaje->hijos_confirmados = [];
                 
@@ -89,14 +98,23 @@ class ConfirmacionViajeController extends Controller
                 return $viaje;
             });
 
+            \Log::info('Step 6: Retornando respuesta exitosa');
             return response()->json([
                 'success' => true,
                 'data' => $viajesConEstado
             ], 200);
         } catch (\Exception $e) {
+            \Log::error('ERROR en viajesDisponibles', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'trace' => $e->getTraceAsString()
+            ]);
             return response()->json([
                 'success' => false,
-                'message' => 'Error al obtener viajes: ' . $e->getMessage()
+                'message' => 'Error al obtener viajes: ' . $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
