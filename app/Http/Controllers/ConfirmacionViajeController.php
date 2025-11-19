@@ -81,12 +81,14 @@ class ConfirmacionViajeController extends Controller
                 ->where('tipo_viaje', 'ida') // Solo viajes de ida tienen confirmación
                 ->where(function($query) use ($hoy) {
                     // Viajes recurrentes: fecha_viaje es NULL, verificar que no hayan terminado
-                    $query->whereNull('fecha_viaje')
-                          ->where(function($q) use ($hoy) {
-                              $q->whereNull('fecha_fin')
-                                ->orWhereDate('fecha_fin', '>=', $hoy);
-                          })
-                    // O viajes únicos con fecha_viaje específica para hoy
+                    $query->where(function($q) use ($hoy) {
+                        $q->whereNull('fecha_viaje')
+                          ->where(function($sub) use ($hoy) {
+                              $sub->whereNull('fecha_fin')
+                                  ->orWhereDate('fecha_fin', '>=', $hoy);
+                          });
+                    })
+                    // O viajes únicos/ejecutados con fecha_viaje específica para hoy
                     ->orWhereDate('fecha_viaje', $hoy);
                 })
                 ->orderBy('hora_inicio_viaje', 'asc')
