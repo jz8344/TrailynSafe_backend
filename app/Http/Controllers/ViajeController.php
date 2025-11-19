@@ -290,10 +290,35 @@ class ViajeController extends Controller
                     $dataToUpdate['capacidad_maxima'] = $unidad->capacidad;
                 }
             }
+            
+            // Si se cambia el estado a "confirmaciones_abiertas" y no tiene fecha_viaje, registrar fecha actual
+            if ($request->has('estado') && $request->estado === 'confirmaciones_abiertas') {
+                if (empty($viaje->fecha_viaje)) {
+                    $fechaActual = now()->format('Y-m-d');
+                    $dataToUpdate['fecha_viaje'] = $fechaActual;
+                    
+                    \Log::info('Viaje recurrente activado - Registrando fecha_viaje', [
+                        'viaje_id' => $viaje->id,
+                        'fecha_viaje' => $fechaActual
+                    ]);
+                    
+                    // Si tiene viaje de retorno asociado, actualizar su fecha también
+                    if ($viaje->viaje_retorno_id) {
+                        $viajeRetorno = Viaje::find($viaje->viaje_retorno_id);
+                        if ($viajeRetorno && empty($viajeRetorno->fecha_viaje)) {
+                            $viajeRetorno->update(['fecha_viaje' => $fechaActual]);
+                            \Log::info('Viaje de retorno actualizado con fecha_viaje', [
+                                'viaje_retorno_id' => $viajeRetorno->id,
+                                'fecha_viaje' => $fechaActual
+                            ]);
+                        }
+                    }
+                }
+            }
 
             $viaje->update($dataToUpdate);
 
-            $viaje->load(['escuela', 'chofer', 'unidad']);
+            $viaje->load(['escuela', 'chofer', 'unidad', 'viajeRetorno']);
 
             return response()->json([
                 'success' => true,
