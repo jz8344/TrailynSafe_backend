@@ -28,8 +28,7 @@ class Viaje extends Model
         'estado',
         'notas',
         'capacidad_maxima',
-        'ninos_confirmados',
-        'confirmacion_automatica'
+        'ninos_confirmados'
     ];
 
     protected $casts = [
