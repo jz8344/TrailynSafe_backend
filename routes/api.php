@@ -63,6 +63,11 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class]
     Route::post('/viajes/confirmar', [ConfirmacionViajeController::class, 'confirmarViaje']);
     Route::post('/viajes/cancelar', [ConfirmacionViajeController::class, 'cancelarConfirmacion']);
     Route::get('/mis-confirmaciones', [ConfirmacionViajeController::class, 'misConfirmaciones']);
+    
+    // Notificaciones (para testing - en producción se ejecutarían con cron)
+    Route::post('/test/notificaciones/recordatorios', [App\Http\Controllers\NotificacionController::class, 'enviarRecordatoriosViaje']);
+    Route::post('/test/notificaciones/inicio-confirmacion', [App\Http\Controllers\NotificacionController::class, 'notificarInicioPeriodoConfirmacion']);
+    Route::post('/test/notificaciones/confirmaciones-automaticas', [App\Http\Controllers\NotificacionController::class, 'procesarConfirmacionesAutomaticas']);
 });
 
 // Rutas protegidas para administradores

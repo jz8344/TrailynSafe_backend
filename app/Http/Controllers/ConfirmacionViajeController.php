@@ -67,20 +67,40 @@ class ConfirmacionViajeController extends Controller
             }
 
             \Log::info('Step 4: Buscando viajes');
+            $hoy = now();
+            $diaSemana = strtolower($hoy->locale('es')->dayName);
+            
             $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
-                ->whereIn('estado', ['confirmaciones_abiertas', 'confirmaciones_cerradas', 'en_curso'])
-                ->whereDate('fecha_viaje', '>=', now()->subDays(7))
+                ->where('tipo_viaje', 'ida') // Solo viajes de ida tienen confirmación
+                ->where(function($query) use ($hoy) {
+                    $query->whereDate('fecha_viaje', '<=', $hoy)
+                          ->where(function($q) use ($hoy) {
+                              $q->whereNull('fecha_fin')
+                                ->orWhereDate('fecha_fin', '>=', $hoy);
+                          });
+                })
                 ->orderBy('fecha_viaje', 'asc')
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
+            
+            // Filtrar por día de la semana
+            $viajes = $viajes->filter(function($viaje) use ($diaSemana) {
+                if (empty($viaje->dias_semana)) {
+                    return true; // Si no tiene días específicos, aplica todos los días
+                }
+                return in_array($diaSemana, $viaje->dias_semana);
+            });
+            
             \Log::info('Viajes encontrados', ['count' => $viajes->count()]);
 
             \Log::info('Step 5: Procesando confirmaciones');
-            $viajesConEstado = $viajes->map(function($viaje) use ($hijos) {
+            $viajesConEstado = $viajes->map(function($viaje) use ($hijos, $hoy) {
                 $hijosConfirmados = [];
+                $enPeriodoConfirmacion = $viaje->estaEnPeriodoConfirmacion();
                 
                 foreach ($hijos as $hijo) {
-                    if ($hijo->escuela_id == $viaje->escuela_id) {
+                    // Verificar que el hijo esté en la misma escuela Y mismo turno
+                    if ($hijo->escuela_id == $viaje->escuela_id && $hijo->turno == $viaje->turno) {
                         $confirmacion = ConfirmacionViaje::where('viaje_id', $viaje->id)
                             ->where('hijo_id', $hijo->id)
                             ->first();
@@ -90,12 +110,16 @@ class ConfirmacionViajeController extends Controller
                             'hijo_nombre' => $hijo->nombre,
                             'confirmado' => $confirmacion ? true : false,
                             'estado' => $confirmacion ? $confirmacion->estado : null,
-                            'puede_confirmar' => $viaje->estado === 'confirmaciones_abiertas' && !$confirmacion
+                            'puede_confirmar' => $enPeriodoConfirmacion && !$confirmacion,
+                            'ubicacion_guardada' => $confirmacion ? $confirmacion->ubicacion_automatica : false
                         ];
                     }
                 }
                 
                 $viaje->hijos_confirmados = $hijosConfirmados;
+                $viaje->en_periodo_confirmacion = $enPeriodoConfirmacion;
+                $viaje->bloqueado = !$enPeriodoConfirmacion;
+                
                 return $viaje;
             });
 

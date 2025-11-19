@@ -19,6 +19,7 @@ class Hijo extends Model
         'grupo',
         'escuela',
         'escuela_id',
+        'turno',
         'codigo_qr',
         'padre_id',
         'emergencia_1',

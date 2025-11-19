@@ -63,17 +63,26 @@ class ViajeController extends Controller
         \Log::info('Creating viaje with data:', $request->all());
         
         $validator = Validator::make($request->all(), [
-            'nombre_ruta' => 'required|string|max:255',
+            'nombre_ruta' => ['required', 'string', 'max:255', 'regex:/^[a-zA-Z0-9\s\-\/]+$/'],
             'escuela_id' => 'required|exists:escuelas,id',
+            'turno' => 'required|in:matutino,vespertino',
             'chofer_id' => 'nullable|exists:choferes,id',
-            'unidad_id' => 'nullable|exists:unidades,id',
+            'unidad_id' => 'required|exists:unidades,id',
             'hora_inicio_confirmacion' => 'required|date_format:H:i:s',
             'hora_fin_confirmacion' => 'required|date_format:H:i:s',
             'hora_inicio_viaje' => 'required|date_format:H:i:s',
             'hora_llegada_estimada' => 'required|date_format:H:i:s',
-            'fecha_viaje' => 'required|date|after_or_equal:yesterday',
+            'fecha_viaje' => 'required|date|after_or_equal:today',
+            'dias_semana' => 'nullable|array',
+            'dias_semana.*' => 'in:lunes,martes,miercoles,jueves,viernes,sabado,domingo',
+            'fecha_fin' => 'nullable|date|after_or_equal:fecha_viaje',
             'notas' => 'nullable|string',
-            'capacidad_maxima' => 'nullable|integer|min:1'
+            'confirmacion_automatica' => 'nullable|boolean',
+            'crear_retorno' => 'nullable|boolean',
+            'hora_inicio_retorno' => 'required_if:crear_retorno,true|date_format:H:i:s',
+            'hora_llegada_retorno' => 'required_if:crear_retorno,true|date_format:H:i:s'
+        ], [
+            'nombre_ruta.regex' => 'El nombre de la ruta solo puede contener letras, números, espacios, guiones (-) y diagonales (/).'
         ]);
 
         if ($validator->fails()) {
@@ -92,9 +101,16 @@ class ViajeController extends Controller
         try {
             DB::beginTransaction();
 
+            // Obtener capacidad de la unidad
+            $unidad = \App\Models\Unidad::findOrFail($request->unidad_id);
+            $capacidadMaxima = $unidad->numero_asientos ?? 30;
+
+            // Crear viaje de ida
             $viaje = Viaje::create([
                 'nombre_ruta' => $request->nombre_ruta,
                 'escuela_id' => $request->escuela_id,
+                'turno' => $request->turno,
+                'tipo_viaje' => 'ida',
                 'chofer_id' => $request->chofer_id,
                 'unidad_id' => $request->unidad_id,
                 'hora_inicio_confirmacion' => $request->hora_inicio_confirmacion,
@@ -102,22 +118,54 @@ class ViajeController extends Controller
                 'hora_inicio_viaje' => $request->hora_inicio_viaje,
                 'hora_llegada_estimada' => $request->hora_llegada_estimada,
                 'fecha_viaje' => $request->fecha_viaje,
+                'dias_semana' => $request->dias_semana ?? null,
+                'fecha_fin' => $request->fecha_fin ?? null,
                 'notas' => $request->notas,
-                'capacidad_maxima' => $request->capacidad_maxima ?? 30,
+                'capacidad_maxima' => $capacidadMaxima,
+                'confirmacion_automatica' => $request->confirmacion_automatica ?? false,
                 'estado' => 'pendiente'
             ]);
 
+            // Crear viaje de retorno si se solicitó
+            $viajeRetorno = null;
+            if ($request->crear_retorno) {
+                $viajeRetorno = Viaje::create([
+                    'nombre_ruta' => $request->nombre_ruta . ' (Retorno)',
+                    'escuela_id' => $request->escuela_id,
+                    'turno' => $request->turno,
+                    'tipo_viaje' => 'retorno',
+                    'chofer_id' => $request->chofer_id,
+                    'unidad_id' => $request->unidad_id,
+                    'hora_inicio_confirmacion' => null, // Sin confirmación para retornos
+                    'hora_fin_confirmacion' => null,
+                    'hora_inicio_viaje' => $request->hora_inicio_retorno,
+                    'hora_llegada_estimada' => $request->hora_llegada_retorno,
+                    'fecha_viaje' => $request->fecha_viaje,
+                    'dias_semana' => $request->dias_semana ?? null,
+                    'fecha_fin' => $request->fecha_fin ?? null,
+                    'notas' => 'Viaje de retorno',
+                    'capacidad_maxima' => $capacidadMaxima,
+                    'confirmacion_automatica' => false,
+                    'estado' => 'pendiente'
+                ]);
+
+                // Vincular viajes
+                $viaje->update(['viaje_retorno_id' => $viajeRetorno->id]);
+            }
+
             DB::commit();
 
-            $viaje->load(['escuela', 'chofer', 'unidad']);
+            $viaje->load(['escuela', 'chofer', 'unidad', 'viajeRetorno']);
 
             return response()->json([
                 'success' => true,
-                'message' => 'Viaje creado exitosamente',
-                'data' => $viaje
+                'message' => 'Viaje creado exitosamente' . ($viajeRetorno ? ' con viaje de retorno' : ''),
+                'data' => $viaje,
+                'viaje_retorno' => $viajeRetorno
             ], 201);
         } catch (\Exception $e) {
             DB::rollBack();
+            \Log::error('Error creating viaje: ' . $e->getMessage());
             return response()->json([
                 'success' => false,
                 'message' => 'Error al crear viaje: ' . $e->getMessage()

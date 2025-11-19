@@ -18,6 +18,7 @@ class ConfirmacionViaje extends Model
         'latitud',
         'longitud',
         'direccion_recogida',
+        'ubicacion_automatica',
         'estado',
         'qr_escaneado',
         'hora_escaneo_qr',
@@ -28,6 +29,7 @@ class ConfirmacionViaje extends Model
     protected $casts = [
         'latitud' => 'decimal:8',
         'longitud' => 'decimal:8',
+        'ubicacion_automatica' => 'boolean',
         'qr_escaneado' => 'boolean',
         'hora_escaneo_qr' => 'datetime',
         'hora_estimada_recogida' => 'datetime:H:i:s'
