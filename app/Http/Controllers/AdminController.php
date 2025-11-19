@@ -60,19 +60,9 @@ class AdminController extends Controller
             return response()->json(['error' => 'Credenciales inválidas'], 401);
         }
 
+        // Los admins usan Sanctum directamente, no necesitan tabla sesiones
         $tokenInstance = $admin->createToken('admin_token');
         $token = $tokenInstance->plainTextToken;
-        $tokenId = $tokenInstance->accessToken->id;
-
-        Sesion::create([
-            'usuario_id' => $admin->id,
-            'token' => $token,
-            'token_id' => $tokenId,
-            'user_agent' => $request->header('User-Agent'),
-            'ip_address' => $request->ip(),
-            'inicio' => now(),
-            'estado' => 'activa',
-        ]);
 
         return response()->json([
             'token' => $token,
