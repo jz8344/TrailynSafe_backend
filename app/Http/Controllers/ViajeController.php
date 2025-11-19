@@ -42,18 +42,17 @@ class ViajeController extends Controller
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
 
-            // Agregar propiedades computadas para cada viaje
-            $viajesConEstado = $viajes->map(function ($viaje) {
-                return array_merge($viaje->toArray(), [
-                    'estado_actual' => $viaje->calcularEstadoActual(),
-                    'puede_activar_hoy' => $viaje->puedeActivarHoy(),
-                    'es_recurrente' => !empty($viaje->dias_semana)
-                ]);
+            // Agregar solo propiedades auxiliares, NO calcular estado
+            $viajesConInfo = $viajes->map(function ($viaje) {
+                $viajeArray = $viaje->toArray();
+                $viajeArray['puede_activar_hoy'] = $viaje->puedeActivarHoy();
+                $viajeArray['es_recurrente'] = !empty($viaje->dias_semana);
+                return $viajeArray;
             });
 
             return response()->json([
                 'success' => true,
-                'data' => $viajesConEstado
+                'data' => $viajesConInfo
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
