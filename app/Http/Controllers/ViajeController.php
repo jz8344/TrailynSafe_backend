@@ -69,10 +69,10 @@ class ViajeController extends Controller
             'chofer_id' => 'nullable|exists:choferes,id',
             'unidad_id' => 'nullable|exists:unidades,id',
             'capacidad_maxima' => 'required_without:unidad_id|integer|min:1',
-            'hora_inicio_confirmacion' => 'required|string|date_format:H:i',
-            'hora_fin_confirmacion' => 'required|string|date_format:H:i',
-            'hora_inicio_viaje' => 'required|string|date_format:H:i',
-            'hora_llegada_estimada' => 'required|string|date_format:H:i',
+            'hora_inicio_confirmacion' => 'required|string|date_format:H:i:s',
+            'hora_fin_confirmacion' => 'required|string|date_format:H:i:s',
+            'hora_inicio_viaje' => 'required|string|date_format:H:i:s',
+            'hora_llegada_estimada' => 'required|string|date_format:H:i:s',
             'fecha_viaje' => 'nullable|date|after_or_equal:today',
             'dias_semana' => 'required|array|min:1',
             'dias_semana.*' => 'integer|between:0,6',
@@ -113,12 +113,7 @@ class ViajeController extends Controller
                 }
             }
 
-            // Asegurar segundos en las horas
-            $horaInicioConf = $request->hora_inicio_confirmacion . ':00';
-            $horaFinConf = $request->hora_fin_confirmacion . ':00';
-            $horaInicioViaje = $request->hora_inicio_viaje . ':00';
-            $horaLlegada = $request->hora_llegada_estimada . ':00';
-
+            // Los horarios ya vienen con formato H:i:s desde el frontend
             // Crear viaje de ida
             $viaje = Viaje::create([
                 'nombre_ruta' => $request->nombre_ruta,
@@ -127,10 +122,10 @@ class ViajeController extends Controller
                 'tipo_viaje' => 'ida',
                 'chofer_id' => $request->chofer_id,
                 'unidad_id' => $request->unidad_id,
-                'hora_inicio_confirmacion' => $horaInicioConf,
-                'hora_fin_confirmacion' => $horaFinConf,
-                'hora_inicio_viaje' => $horaInicioViaje,
-                'hora_llegada_estimada' => $horaLlegada,
+                'hora_inicio_confirmacion' => $request->hora_inicio_confirmacion,
+                'hora_fin_confirmacion' => $request->hora_fin_confirmacion,
+                'hora_inicio_viaje' => $request->hora_inicio_viaje,
+                'hora_llegada_estimada' => $request->hora_llegada_estimada,
                 'fecha_viaje' => $request->fecha_viaje,
                 'dias_semana' => $request->dias_semana,
                 'fecha_fin' => $request->fecha_fin,
@@ -154,8 +149,8 @@ class ViajeController extends Controller
                     'unidad_id' => $request->unidad_id,
                     'hora_inicio_confirmacion' => null,
                     'hora_fin_confirmacion' => null,
-                    'hora_inicio_viaje' => $horaLlegada, // Retorno inicia cuando llega el viaje de ida
-                    'hora_llegada_estimada' => $horaInicioViaje, // Llega al punto de partida original
+                    'hora_inicio_viaje' => $request->hora_llegada_estimada, // Retorno inicia cuando llega el viaje de ida
+                    'hora_llegada_estimada' => $request->hora_inicio_viaje, // Llega al punto de partida original
                     'fecha_viaje' => $request->fecha_viaje,
                     'dias_semana' => $request->dias_semana,
                     'fecha_fin' => $request->fecha_fin,
@@ -228,10 +223,10 @@ class ViajeController extends Controller
             'turno' => 'sometimes|in:matutino,vespertino',
             'chofer_id' => 'nullable|exists:choferes,id',
             'unidad_id' => 'nullable|exists:unidades,id',
-            'hora_inicio_confirmacion' => 'sometimes|date_format:H:i',
-            'hora_fin_confirmacion' => 'sometimes|date_format:H:i',
-            'hora_inicio_viaje' => 'sometimes|date_format:H:i',
-            'hora_llegada_estimada' => 'sometimes|date_format:H:i',
+            'hora_inicio_confirmacion' => 'sometimes|date_format:H:i:s',
+            'hora_fin_confirmacion' => 'sometimes|date_format:H:i:s',
+            'hora_inicio_viaje' => 'sometimes|date_format:H:i:s',
+            'hora_llegada_estimada' => 'sometimes|date_format:H:i:s',
             'fecha_viaje' => 'sometimes|date',
             'dias_semana' => 'nullable|array',
             'dias_semana.*' => 'integer|between:0,6',
@@ -274,18 +269,18 @@ class ViajeController extends Controller
                 'capacidad_maxima'
             ]);
             
-            // Agregar segundos a las horas si se proporcionan
+            // Los horarios ya vienen con formato H:i:s desde el frontend
             if ($request->has('hora_inicio_confirmacion')) {
-                $dataToUpdate['hora_inicio_confirmacion'] = $request->hora_inicio_confirmacion . ':00';
+                $dataToUpdate['hora_inicio_confirmacion'] = $request->hora_inicio_confirmacion;
             }
             if ($request->has('hora_fin_confirmacion')) {
-                $dataToUpdate['hora_fin_confirmacion'] = $request->hora_fin_confirmacion . ':00';
+                $dataToUpdate['hora_fin_confirmacion'] = $request->hora_fin_confirmacion;
             }
             if ($request->has('hora_inicio_viaje')) {
-                $dataToUpdate['hora_inicio_viaje'] = $request->hora_inicio_viaje . ':00';
+                $dataToUpdate['hora_inicio_viaje'] = $request->hora_inicio_viaje;
             }
             if ($request->has('hora_llegada_estimada')) {
-                $dataToUpdate['hora_llegada_estimada'] = $request->hora_llegada_estimada . ':00';
+                $dataToUpdate['hora_llegada_estimada'] = $request->hora_llegada_estimada;
             }
             
             // Si se cambió la unidad, actualizar capacidad
