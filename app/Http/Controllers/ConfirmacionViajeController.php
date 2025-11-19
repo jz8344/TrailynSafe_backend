@@ -77,52 +77,25 @@ class ConfirmacionViajeController extends Controller
             ]);
             
             // Obtener viajes de ida para las escuelas del usuario
+            // Solo mostrar viajes que YA tienen fecha_viaje registrada (el admin ya los activó para hoy)
             $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->where('tipo_viaje', 'ida') // Solo viajes de ida tienen confirmación
-                ->where(function($query) use ($hoy) {
-                    // Viajes recurrentes: fecha_viaje es NULL, verificar que no hayan terminado
-                    $query->where(function($q) use ($hoy) {
-                        $q->whereNull('fecha_viaje')
-                          ->where(function($sub) use ($hoy) {
-                              $sub->whereNull('fecha_fin')
-                                  ->orWhereDate('fecha_fin', '>=', $hoy);
-                          });
-                    })
-                    // O viajes únicos/ejecutados con fecha_viaje específica para hoy
-                    ->orWhereDate('fecha_viaje', $hoy);
-                })
+                ->whereDate('fecha_viaje', $hoy) // Solo viajes activos para hoy
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
             
-            \Log::info('Viajes obtenidos antes de filtrar por día', [
+            \Log::info('Viajes disponibles para hoy', [
                 'count' => $viajes->count(),
                 'viajes' => $viajes->map(function($v) {
                     return [
                         'id' => $v->id,
                         'nombre' => $v->nombre_ruta,
-                        'dias_semana' => $v->dias_semana,
                         'fecha_viaje' => $v->fecha_viaje,
-                        'turno' => $v->turno
+                        'turno' => $v->turno,
+                        'estado' => $v->estado
                     ];
                 })
             ]);
-            
-            // Filtrar por día de la semana (para viajes recurrentes)
-            $viajes = $viajes->filter(function($viaje) use ($diaSemanaNumero) {
-                // Si es viaje único (tiene fecha_viaje específica), incluirlo
-                if ($viaje->fecha_viaje !== null) {
-                    return true;
-                }
-                
-                // Para viajes recurrentes, verificar que el día actual esté en dias_semana
-                if (empty($viaje->dias_semana) || !is_array($viaje->dias_semana)) {
-                    return false; // Si no tiene días definidos, no mostrarlo
-                }
-                
-                return in_array($diaSemanaNumero, $viaje->dias_semana);
-            });
-            
-            \Log::info('Viajes después de filtrar por día', ['count' => $viajes->count()]);
 
             \Log::info('Step 5: Procesando confirmaciones');
             $viajesConEstado = $viajes->map(function($viaje) use ($hijos, $hoy) {
