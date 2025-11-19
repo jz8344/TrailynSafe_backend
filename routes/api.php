@@ -134,6 +134,7 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::post('/admin/viajes/{id}/abrir-confirmaciones', [ViajeController::class, 'abrirConfirmaciones']);
     Route::post('/admin/viajes/{id}/cerrar-confirmaciones', [ViajeController::class, 'cerrarConfirmaciones']);
     Route::get('/admin/viajes/{id}/confirmaciones', [ViajeController::class, 'confirmaciones']);
+    Route::post('/admin/viajes/{id}/activar-hoy', [ViajeController::class, 'activarHoy']);
 });
 
 // Rutas para choferes (API móvil - requiere autenticación de chofer)

@@ -161,6 +161,96 @@ class Viaje extends Model
     }
 
     /**
+     * Verifica si el viaje puede ser activado para hoy
+     * Un viaje recurrente puede activarse si:
+     * 1. Tiene dias_semana configurados (es recurrente)
+     * 2. Hoy es uno de esos días
+     * 3. No está activado ya para hoy (fecha_viaje != hoy)
+     * 4. No ha llegado a su fecha_fin
+     */
+    public function puedeActivarHoy()
+    {
+        // Si no es recurrente, no se puede activar manualmente
+        if (empty($this->dias_semana)) {
+            return false;
+        }
+
+        // Verificar que hoy sea un día válido
+        $numeroDiaHoy = now()->dayOfWeek; // 0=Domingo, 1=Lunes, ..., 6=Sábado
+        if (!in_array($numeroDiaHoy, $this->dias_semana)) {
+            return false;
+        }
+
+        // Verificar que no haya pasado la fecha_fin
+        if ($this->fecha_fin && now()->toDateString() > $this->fecha_fin) {
+            return false;
+        }
+
+        // Verificar que no esté activado ya para hoy
+        if ($this->fecha_viaje && $this->fecha_viaje->toDateString() === now()->toDateString()) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Calcula el estado actual del viaje basado en horarios y fecha
+     */
+    public function calcularEstadoActual()
+    {
+        // Si no tiene fecha_viaje, está en espera de ser activado
+        if (!$this->fecha_viaje) {
+            return 'pendiente';
+        }
+
+        $ahora = now();
+        $fechaHoy = $ahora->toDateString();
+        $horaActual = $ahora->format('H:i:s');
+
+        // Si la fecha_viaje no es hoy, verificar si ya pasó o aún no llega
+        if ($this->fecha_viaje->toDateString() !== $fechaHoy) {
+            if ($this->fecha_viaje->isPast()) {
+                return 'completado'; // Ya pasó
+            }
+            return 'pendiente'; // Aún no llega
+        }
+
+        // Si es hoy, determinar estado según horarios
+        $horaInicioConf = $this->hora_inicio_confirmacion ? substr($this->hora_inicio_confirmacion, 11) : null;
+        $horaFinConf = $this->hora_fin_confirmacion ? substr($this->hora_fin_confirmacion, 11) : null;
+        $horaInicioViaje = $this->hora_inicio_viaje ? substr($this->hora_inicio_viaje, 11) : null;
+        $horaLlegada = $this->hora_llegada_estimada ? substr($this->hora_llegada_estimada, 11) : null;
+
+        // Viaje de retorno sin confirmación
+        if ($this->tipo_viaje === 'retorno' || !$horaInicioConf) {
+            if ($horaLlegada && $horaActual >= $horaLlegada) {
+                return 'completado';
+            }
+            if ($horaInicioViaje && $horaActual >= $horaInicioViaje) {
+                return 'en_curso';
+            }
+            return 'pendiente';
+        }
+
+        // Viaje de ida con confirmación
+        if ($horaLlegada && $horaActual >= $horaLlegada) {
+            return 'completado';
+        }
+        if ($horaInicioViaje && $horaActual >= $horaInicioViaje) {
+            return 'en_curso';
+        }
+        if ($horaFinConf && $horaActual >= $horaFinConf) {
+            return 'confirmaciones_cerradas';
+        }
+        if ($horaInicioConf && $horaActual >= $horaInicioConf) {
+            return 'confirmaciones_abiertas';
+        }
+
+        return 'pendiente';
+    }
+
+    /**
      * Verifica si está en período de confirmación
      */
     public function estaEnPeriodoConfirmacion()
@@ -169,20 +259,15 @@ class Viaje extends Model
             return false; // Los viajes de retorno no tienen período de confirmación
         }
 
+        if (!$this->fecha_viaje) {
+            return false; // Sin fecha no hay período
+        }
+
         $ahora = now();
         $fechaHoy = $ahora->toDateString();
 
-        // Verificar si hoy está dentro del rango de fechas
-        if ($fechaHoy < $this->fecha_viaje->toDateString()) {
-            return false; // Aún no es la fecha
-        }
-
-        if ($this->fecha_fin && $fechaHoy > $this->fecha_fin->toDateString()) {
-            return false; // Ya pasó el rango
-        }
-
-        // Verificar día de la semana
-        if (!$this->esHoyDiaValido()) {
+        // Verificar si hoy es la fecha del viaje
+        if ($this->fecha_viaje->toDateString() !== $fechaHoy) {
             return false;
         }
 

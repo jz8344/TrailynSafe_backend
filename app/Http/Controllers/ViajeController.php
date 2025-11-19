@@ -42,9 +42,18 @@ class ViajeController extends Controller
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();
 
+            // Agregar propiedades computadas para cada viaje
+            $viajesConEstado = $viajes->map(function ($viaje) {
+                return array_merge($viaje->toArray(), [
+                    'estado_actual' => $viaje->calcularEstadoActual(),
+                    'puede_activar_hoy' => $viaje->puedeActivarHoy(),
+                    'es_recurrente' => !empty($viaje->dias_semana)
+                ]);
+            });
+
             return response()->json([
                 'success' => true,
-                'data' => $viajes
+                'data' => $viajesConEstado
             ], 200);
         } catch (\Exception $e) {
             return response()->json([
@@ -448,6 +457,88 @@ class ViajeController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Error: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Activar viaje recurrente para hoy
+     */
+    public function activarHoy($id)
+    {
+        try {
+            $viaje = Viaje::findOrFail($id);
+            $hoy = now();
+            $diaSemanaNumero = $hoy->dayOfWeek; // 0=Domingo, 1=Lunes, ..., 6=Sábado
+            
+            // Verificar que hoy sea día válido para este viaje
+            if (!$viaje->dias_semana || !in_array($diaSemanaNumero, $viaje->dias_semana)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Hoy no es un día válido para este viaje'
+                ], 400);
+            }
+            
+            // Verificar que no haya pasado la fecha_fin
+            if ($viaje->fecha_fin && $hoy->toDateString() > $viaje->fecha_fin->toDateString()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Este viaje ya finalizó su período'
+                ], 400);
+            }
+            
+            DB::beginTransaction();
+            
+            // Actualizar fecha del viaje
+            $fechaActual = $hoy->format('Y-m-d');
+            $viaje->update(['fecha_viaje' => $fechaActual]);
+            
+            // Actualizar viaje de retorno si existe
+            if ($viaje->viaje_retorno_id) {
+                $viajeRetorno = Viaje::find($viaje->viaje_retorno_id);
+                if ($viajeRetorno) {
+                    $viajeRetorno->update(['fecha_viaje' => $fechaActual]);
+                }
+            }
+            
+            // Recalcular estado automático
+            $estadoActual = $viaje->calcularEstadoActual();
+            $viaje->update(['estado' => $estadoActual]);
+            
+            if ($viaje->viaje_retorno_id) {
+                $viajeRetorno = Viaje::find($viaje->viaje_retorno_id);
+                if ($viajeRetorno) {
+                    $estadoRetorno = $viajeRetorno->calcularEstadoActual();
+                    $viajeRetorno->update(['estado' => $estadoRetorno]);
+                }
+            }
+            
+            DB::commit();
+            
+            $viaje->refresh();
+            $viaje->load(['escuela', 'chofer', 'unidad', 'viajeRetorno']);
+            
+            \Log::info('Viaje activado para hoy', [
+                'viaje_id' => $viaje->id,
+                'fecha_viaje' => $fechaActual,
+                'estado' => $estadoActual
+            ]);
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Viaje activado para hoy exitosamente',
+                'data' => $viaje
+            ], 200);
+        } catch (\Exception $e) {
+            DB::rollBack();
+            \Log::error('Error activando viaje', [
+                'viaje_id' => $id,
+                'error' => $e->getMessage()
+            ]);
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error al activar viaje: ' . $e->getMessage()
             ], 500);
         }
     }
