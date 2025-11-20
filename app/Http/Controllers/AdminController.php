@@ -72,7 +72,6 @@ class AdminController extends Controller
             'success' => true
         ]);
     }
-
     public function editarPerfil(Request $request)
     {
         $admin = Auth::guard('admin-sanctum')->user();
