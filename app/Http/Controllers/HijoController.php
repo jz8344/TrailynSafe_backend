@@ -72,7 +72,20 @@ class HijoController extends Controller
     public function userIndex(Request $request)
     {
         $user = auth()->user();
-        return response()->json(Hijo::where('padre_id', $user->id)->orderByDesc('id')->get());
+        $hijos = Hijo::with('escuela')->where('padre_id', $user->id)->orderByDesc('id')->get();
+
+        // Transformar para que el campo 'escuela' sea el nombre de la escuela (string)
+        // para mantener compatibilidad con la app móvil que espera un string
+        $hijos->transform(function ($hijo) {
+            if ($hijo->relationLoaded('escuela') && $hijo->escuela) {
+                $nombreEscuela = $hijo->escuela->nombre;
+                $hijo->unsetRelation('escuela');
+                $hijo->setAttribute('escuela', $nombreEscuela);
+            }
+            return $hijo;
+        });
+
+        return response()->json($hijos);
     }
 
     public function userStore(Request $request)
@@ -97,6 +110,15 @@ class HijoController extends Controller
         $data['padre_id'] = $user->id;
 
         $hijo = Hijo::create($data);
-        return response()->json($hijo->load('escuela'), 201);
+        
+        // Cargar relación y transformar a string para compatibilidad
+        $hijo->load('escuela');
+        if ($hijo->relationLoaded('escuela') && $hijo->escuela) {
+            $nombreEscuela = $hijo->escuela->nombre;
+            $hijo->unsetRelation('escuela');
+            $hijo->setAttribute('escuela', $nombreEscuela);
+        }
+
+        return response()->json($hijo, 201);
     }
 }

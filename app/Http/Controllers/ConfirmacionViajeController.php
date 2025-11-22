@@ -252,7 +252,14 @@ class ConfirmacionViajeController extends Controller
 
             DB::commit();
 
-            $confirmacion->load('hijo', 'viaje');
+            $confirmacion->load(['hijo.escuela', 'viaje']);
+
+            // Transformar hijo.escuela a string para compatibilidad
+            if ($confirmacion->hijo && $confirmacion->hijo->relationLoaded('escuela') && $confirmacion->hijo->escuela) {
+                $nombreEscuela = $confirmacion->hijo->escuela->nombre;
+                $confirmacion->hijo->unsetRelation('escuela');
+                $confirmacion->hijo->setAttribute('escuela', $nombreEscuela);
+            }
 
             return response()->json([
                 'success' => true,
@@ -360,10 +367,20 @@ class ConfirmacionViajeController extends Controller
         try {
             $usuario = Auth::guard('sanctum')->user();
 
-            $confirmaciones = ConfirmacionViaje::with(['viaje.escuela', 'hijo'])
+            $confirmaciones = ConfirmacionViaje::with(['viaje.escuela', 'hijo.escuela'])
                 ->where('usuario_id', $usuario->id)
                 ->orderBy('created_at', 'desc')
                 ->get();
+
+            // Transformar hijo.escuela a string para compatibilidad
+            $confirmaciones->transform(function ($conf) {
+                if ($conf->hijo && $conf->hijo->relationLoaded('escuela') && $conf->hijo->escuela) {
+                    $nombreEscuela = $conf->hijo->escuela->nombre;
+                    $conf->hijo->unsetRelation('escuela');
+                    $conf->hijo->setAttribute('escuela', $nombreEscuela);
+                }
+                return $conf;
+            });
 
             return response()->json([
                 'success' => true,
