@@ -27,11 +27,5 @@ class Chofer extends Model
         'created_at' => 'datetime',
         'updated_at' => 'datetime',
     ];
-
-    
-
-    public function rutas()
-    {
-        return $this->hasMany(Ruta::class, 'chofer_id');
-    }
 }
+

@@ -29,9 +29,5 @@ class Unidad extends Model
         'anio' => 'integer',
         'capacidad' => 'integer',
     ];
-
-    public function rutas()
-    {
-        return $this->hasMany(Ruta::class, 'unidad_id');
-    }
 }
+
