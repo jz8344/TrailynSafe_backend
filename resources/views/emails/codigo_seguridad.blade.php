@@ -23,7 +23,11 @@
                     <!-- Header -->
                     <tr>
                         <td style="padding: 36px 32px 28px 32px; text-align: center; border-bottom: 1px solid #e0f2fe;">
-                            <img src="https://i.ibb.co/G3J3bdVn/logo.png" alt="Trailyn Safe" width="160" style="display: block; margin: 0 auto;">
+                            <h1 style="margin: 0; color: #0f172a; font-size: 28px; font-weight: 700; font-family: 'Georgia', 'Times New Roman', serif; letter-spacing: -0.5px;">
+                                Trailyn Safe
+                            </h1>    
+                            <img src="https://i.ibb.co/G3J3bdVn/logo.png" alt="Trailyn Safe" width="160" style="display: block; margin: 0 auto 16px auto;">
+                        
                         </td>
                     </tr>
                     
