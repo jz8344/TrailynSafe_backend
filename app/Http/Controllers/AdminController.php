@@ -83,6 +83,7 @@ class AdminController extends Controller
         $validator = Validator::make($request->all(), [
             'nombre' => 'sometimes|required|string|max:255',
             'apellidos' => 'sometimes|required|string|max:255',
+            'telefono' => 'sometimes|nullable|string|max:20',
         ]);
 
         if ($validator->fails()) {
@@ -96,6 +97,9 @@ class AdminController extends Controller
         }
         if ($request->has('apellidos')) {
             $datos['apellidos'] = ucwords(strtolower(trim($request->apellidos)));
+        }
+        if ($request->has('telefono')) {
+            $datos['telefono'] = trim($request->telefono);
         }
 
         $admin->update($datos);

@@ -18,6 +18,7 @@ class Admin extends Authenticatable
         'nombre',
         'apellidos',
         'email',
+        'telefono',
         'password',
         'rol',
         'fecha_registro',
