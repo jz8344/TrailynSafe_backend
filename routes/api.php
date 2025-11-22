@@ -14,6 +14,7 @@ use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\EscuelaController;
 use App\Http\Controllers\ImpresionController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\ViajeController;
 
 // Rutas públicas para usuarios
 Route::post('/register', [UsuarioController::class, 'register']);
@@ -54,10 +55,11 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class]
     // Google Auth - Desconectar cuenta
     Route::post('/auth/google/disconnect', [GoogleAuthController::class, 'disconnectGoogle']);
     
-    // Notificaciones (para testing - en producción se ejecutarían con cron)
-    Route::post('/test/notificaciones/recordatorios', [App\Http\Controllers\NotificacionController::class, 'enviarRecordatoriosViaje']);
-    Route::post('/test/notificaciones/inicio-confirmacion', [App\Http\Controllers\NotificacionController::class, 'notificarInicioPeriodoConfirmacion']);
-    Route::post('/test/notificaciones/confirmaciones-automaticas', [App\Http\Controllers\NotificacionController::class, 'procesarConfirmacionesAutomaticas']);
+    // Viajes - App Móvil (Padres)
+    Route::get('/viajes/disponibles', [ViajeController::class, 'getViajesDisponibles']);
+    Route::post('/viajes/solicitar', [ViajeController::class, 'solicitarViaje']);
+    Route::get('/viajes/mis-solicitudes', [ViajeController::class, 'misSolicitudes']);
+    Route::delete('/viajes/solicitudes/{id}/cancelar', [ViajeController::class, 'cancelarSolicitud']);
 });
 
 // Rutas protegidas para administradores
@@ -116,6 +118,17 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::put('/admin/notificaciones/read-all', [App\Http\Controllers\NotificacionPanelController::class, 'markAllAsRead']);
     Route::delete('/admin/notificaciones/{id}', [App\Http\Controllers\NotificacionPanelController::class, 'destroy']);
     Route::delete('/admin/notificaciones', [App\Http\Controllers\NotificacionPanelController::class, 'destroyAll']);
+    
+    // CRUD Viajes (Admin)
+    Route::get('/admin/viajes', [ViajeController::class, 'index']);
+    Route::post('/admin/viajes', [ViajeController::class, 'store']);
+    Route::put('/admin/viajes/{id}', [ViajeController::class, 'update']);
+    Route::delete('/admin/viajes/{id}', [ViajeController::class, 'destroy']);
+    
+    // Solicitudes de Viajes (Admin)
+    Route::get('/admin/viajes/solicitudes', [ViajeController::class, 'listarSolicitudes']);
+    Route::post('/admin/viajes/solicitudes/{id}/confirmar', [ViajeController::class, 'confirmarSolicitud']);
+    Route::post('/admin/viajes/solicitudes/{id}/rechazar', [ViajeController::class, 'rechazarSolicitud']);
 });
 
 
