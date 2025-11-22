@@ -20,33 +20,42 @@ class CodigoSeguridadController extends Controller
 
         $usuario = Usuario::where('correo', $request->correo)->first();
 
-        if (!$usuario) {
-            return response()->json(['success' => false], 200);
+        // SEGURIDAD: Siempre retornar éxito para evitar enumeration attacks
+        // No revelar si el correo existe o no en la base de datos
+        if ($usuario) {
+            $codigo = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
+
+            CodigoSeguridad::updateOrCreate(
+                ['usuario_id' => $usuario->id],
+                [
+                    'codigo' => $codigo,
+                    'expires_at' => now()->addMinutes(10)
+                ]
+            );
+
+            Mail::to($usuario->correo)->send(new CodigoSeguridadMail($codigo));
         }
-
-        $codigo = str_pad(random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-
-        CodigoSeguridad::updateOrCreate(
-            ['usuario_id' => $usuario->id],
-            [
-                'codigo' => $codigo,
-                'expires_at' => now()->addMinutes(10)
-            ]
-        );
-
-        Mail::to($usuario->correo)->send(new CodigoSeguridadMail($codigo));
-
-        return response()->json(['success' => true], 200);
+        
+        // Siempre retornar éxito, incluso si el correo no existe
+        return response()->json([
+            'success' => true,
+            'message' => 'Si el correo está registrado, recibirás un código de verificación.'
+        ], 200);
     }
 
     public function validarCodigo(Request $request)
     {
         $request->validate([
-            'correo' => 'required|email|exists:usuarios,correo',
+            'correo' => 'required|email',
             'codigo' => 'required|string|size:6',
         ]);
 
         $usuario = Usuario::where('correo', $request->correo)->first();
+
+        // SEGURIDAD: No revelar si el correo existe, solo si el código es incorrecto
+        if (!$usuario) {
+            return response()->json(['error' => 'Código incorrecto o expirado.'], 400);
+        }
 
         $codigoDB = CodigoSeguridad::where('usuario_id', $usuario->id)
             ->where('codigo', $request->codigo)
