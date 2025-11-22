@@ -135,6 +135,14 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::post('/admin/viajes/{id}/cerrar-confirmaciones', [ViajeController::class, 'cerrarConfirmaciones']);
     Route::get('/admin/viajes/{id}/confirmaciones', [ViajeController::class, 'confirmaciones']);
     Route::post('/admin/viajes/{id}/activar-hoy', [ViajeController::class, 'activarHoy']);
+    
+    // Notificaciones Panel (Actividad Reciente)
+    Route::get('/admin/notificaciones', [App\Http\Controllers\NotificacionPanelController::class, 'index']);
+    Route::post('/admin/notificaciones', [App\Http\Controllers\NotificacionPanelController::class, 'store']);
+    Route::put('/admin/notificaciones/{id}/read', [App\Http\Controllers\NotificacionPanelController::class, 'markAsRead']);
+    Route::put('/admin/notificaciones/read-all', [App\Http\Controllers\NotificacionPanelController::class, 'markAllAsRead']);
+    Route::delete('/admin/notificaciones/{id}', [App\Http\Controllers\NotificacionPanelController::class, 'destroy']);
+    Route::delete('/admin/notificaciones', [App\Http\Controllers\NotificacionPanelController::class, 'destroyAll']);
 });
 
 // Rutas para choferes (API móvil - requiere autenticación de chofer)
