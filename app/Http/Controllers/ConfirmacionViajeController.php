@@ -75,9 +75,81 @@ class ConfirmacionViajeController extends Controller
                 'dia_semana_numero' => $diaSemanaNumero,
                 'dia_nombre' => $hoy->locale('es')->dayName
             ]);
+
+            // --- LÓGICA DE GENERACIÓN AUTOMÁTICA DE VIAJES RECURRENTES ---
+            // Buscar plantillas de viajes (recurrentes) para las escuelas del usuario
+            // que coincidan con el día de la semana actual y estén vigentes
+            $plantillas = Viaje::whereIn('escuela_id', $escuelaIds)
+                ->where('tipo_viaje', 'ida')
+                ->whereNotNull('dias_semana') // Es recurrente
+                ->where(function($q) use ($hoy) {
+                    $q->whereNull('fecha_fin')
+                      ->orWhereDate('fecha_fin', '>=', $hoy);
+                })
+                ->get();
+
+            foreach ($plantillas as $plantilla) {
+                // Verificar si hoy es un día programado para este viaje
+                if (in_array($diaSemanaNumero, $plantilla->dias_semana ?? [])) {
+                    
+                    // Verificar si ya existe una instancia generada para hoy
+                    $instanciaExistente = Viaje::where('parent_viaje_id', $plantilla->id)
+                        ->whereDate('fecha_viaje', $hoy)
+                        ->exists();
+                    
+                    // También verificar si la propia plantilla tiene fecha de hoy (caso legacy o mal configurado)
+                    $esMismaFecha = $plantilla->fecha_viaje && $plantilla->fecha_viaje->isToday();
+
+                    if (!$instanciaExistente && !$esMismaFecha) {
+                        \Log::info('Generando instancia automática para viaje recurrente', ['plantilla_id' => $plantilla->id]);
+                        
+                        // Clonar la plantilla para crear la instancia de hoy
+                        $nuevaInstancia = $plantilla->replicate();
+                        $nuevaInstancia->fecha_viaje = $hoy;
+                        $nuevaInstancia->parent_viaje_id = $plantilla->id;
+                        $nuevaInstancia->es_plantilla = false;
+                        $nuevaInstancia->ninos_confirmados = 0;
+                        $nuevaInstancia->coordenadas_recogida = [];
+                        
+                        // Calcular estado inicial basado en la hora
+                        $estadoInicial = $plantilla->calcularEstadoActual();
+                        // Forzar estado pendiente o abierto si es temprano, para evitar que nazca "completado" si hay desfase
+                        // Pero calcularEstadoActual ya maneja lógica de horas.
+                        
+                        $nuevaInstancia->estado = $estadoInicial;
+                        $nuevaInstancia->save();
+
+                        // Generar también el viaje de retorno si la plantilla lo tiene asociado
+                        if ($plantilla->viaje_retorno_id) {
+                            $plantillaRetorno = Viaje::find($plantilla->viaje_retorno_id);
+                            if ($plantillaRetorno) {
+                                $nuevaInstanciaRetorno = $plantillaRetorno->replicate();
+                                $nuevaInstanciaRetorno->fecha_viaje = $hoy;
+                                $nuevaInstanciaRetorno->parent_viaje_id = $plantillaRetorno->id;
+                                $nuevaInstanciaRetorno->es_plantilla = false;
+                                $nuevaInstanciaRetorno->ninos_confirmados = 0;
+                                $nuevaInstanciaRetorno->coordenadas_recogida = [];
+                                // Vincular con la nueva instancia de ida
+                                $nuevaInstanciaRetorno->viaje_retorno_id = $nuevaInstancia->id;
+                                
+                                // Calcular estado del retorno
+                                $estadoRetorno = $plantillaRetorno->calcularEstadoActual();
+                                $nuevaInstanciaRetorno->estado = $estadoRetorno;
+                                
+                                $nuevaInstanciaRetorno->save();
+                                
+                                // Actualizar la instancia de ida para vincularla con el nuevo retorno
+                                $nuevaInstancia->viaje_retorno_id = $nuevaInstanciaRetorno->id;
+                                $nuevaInstancia->save();
+                            }
+                        }
+                    }
+                }
+            }
+            // -------------------------------------------------------------
             
             // Obtener viajes de ida para las escuelas del usuario
-            // Solo mostrar viajes que YA tienen fecha_viaje registrada (el admin ya los activó para hoy)
+            // Solo mostrar viajes que YA tienen fecha_viaje registrada (el admin ya los activó para hoy o se autogeneraron)
             $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->where('tipo_viaje', 'ida') // Solo viajes de ida tienen confirmación
                 ->whereDate('fecha_viaje', $hoy) // Solo viajes activos para hoy

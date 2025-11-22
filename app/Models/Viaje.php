@@ -28,7 +28,9 @@ class Viaje extends Model
         'estado',
         'notas',
         'capacidad_maxima',
-        'ninos_confirmados'
+        'ninos_confirmados',
+        'es_plantilla',
+        'parent_viaje_id'
     ];
 
     protected $casts = [
@@ -42,7 +44,8 @@ class Viaje extends Model
         'hora_llegada_estimada' => 'datetime:H:i:s',
         'capacidad_maxima' => 'integer',
         'ninos_confirmados' => 'integer',
-        'confirmacion_automatica' => 'boolean'
+        'confirmacion_automatica' => 'boolean',
+        'es_plantilla' => 'boolean'
     ];
 
     /**
@@ -91,6 +94,22 @@ class Viaje extends Model
     public function telemetria()
     {
         return $this->hasMany(TelemetriaChofer::class);
+    }
+
+    /**
+     * Relación con el viaje padre (plantilla)
+     */
+    public function parentViaje()
+    {
+        return $this->belongsTo(Viaje::class, 'parent_viaje_id');
+    }
+
+    /**
+     * Relación con las instancias generadas (hijos)
+     */
+    public function instancias()
+    {
+        return $this->hasMany(Viaje::class, 'parent_viaje_id');
     }
 
     /**

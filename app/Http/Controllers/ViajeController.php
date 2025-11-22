@@ -123,6 +123,8 @@ class ViajeController extends Controller
 
             // Los horarios ya vienen con formato H:i:s desde el frontend
             // Crear viaje de ida
+            $esPlantilla = !empty($request->dias_semana);
+            
             $viaje = Viaje::create([
                 'nombre_ruta' => $request->nombre_ruta,
                 'escuela_id' => $request->escuela_id,
@@ -139,7 +141,8 @@ class ViajeController extends Controller
                 'fecha_fin' => $request->fecha_fin,
                 'notas' => $request->notas,
                 'capacidad_maxima' => $capacidadMaxima,
-                'estado' => 'pendiente'
+                'estado' => 'pendiente',
+                'es_plantilla' => $esPlantilla
             ]);
 
             // Crear viaje de retorno si se solicitó
