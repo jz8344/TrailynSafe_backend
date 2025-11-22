@@ -252,16 +252,16 @@ class ConfirmacionViajeController extends Controller
 
             DB::commit();
 
-            $confirmacion->load(['hijo.escuela', 'viaje']);
+            $confirmacion->load(['hijo.datosEscuela', 'viaje']);
 
-            // Transformar hijo.escuela a string para compatibilidad
-            if ($confirmacion->hijo && $confirmacion->hijo->relationLoaded('escuela')) {
-                if ($confirmacion->hijo->escuela) {
-                    $nombreEscuela = $confirmacion->hijo->escuela->nombre;
-                    $confirmacion->hijo->unsetRelation('escuela');
+            // Transformar hijo.datosEscuela a string para compatibilidad
+            if ($confirmacion->hijo && $confirmacion->hijo->relationLoaded('datosEscuela')) {
+                if ($confirmacion->hijo->datosEscuela) {
+                    $nombreEscuela = $confirmacion->hijo->datosEscuela->nombre;
+                    $confirmacion->hijo->unsetRelation('datosEscuela');
                     $confirmacion->hijo->setAttribute('escuela', $nombreEscuela);
                 } else {
-                    $confirmacion->hijo->unsetRelation('escuela');
+                    $confirmacion->hijo->unsetRelation('datosEscuela');
                 }
             }
 
@@ -371,20 +371,20 @@ class ConfirmacionViajeController extends Controller
         try {
             $usuario = Auth::guard('sanctum')->user();
 
-            $confirmaciones = ConfirmacionViaje::with(['viaje.escuela', 'hijo.escuela'])
+            $confirmaciones = ConfirmacionViaje::with(['viaje.escuela', 'hijo.datosEscuela'])
                 ->where('usuario_id', $usuario->id)
                 ->orderBy('created_at', 'desc')
                 ->get();
 
-            // Transformar hijo.escuela a string para compatibilidad
+            // Transformar hijo.datosEscuela a string para compatibilidad
             $confirmaciones->transform(function ($conf) {
-                if ($conf->hijo && $conf->hijo->relationLoaded('escuela')) {
-                    if ($conf->hijo->escuela) {
-                        $nombreEscuela = $conf->hijo->escuela->nombre;
-                        $conf->hijo->unsetRelation('escuela');
+                if ($conf->hijo && $conf->hijo->relationLoaded('datosEscuela')) {
+                    if ($conf->hijo->datosEscuela) {
+                        $nombreEscuela = $conf->hijo->datosEscuela->nombre;
+                        $conf->hijo->unsetRelation('datosEscuela');
                         $conf->hijo->setAttribute('escuela', $nombreEscuela);
                     } else {
-                        $conf->hijo->unsetRelation('escuela');
+                        $conf->hijo->unsetRelation('datosEscuela');
                     }
                 }
                 return $conf;

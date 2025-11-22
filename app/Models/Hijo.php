@@ -31,7 +31,7 @@ class Hijo extends Model
         return $this->belongsTo(Usuario::class, 'padre_id');
     }
 
-    public function escuela()
+    public function datosEscuela()
     {
         return $this->belongsTo(Escuela::class, 'escuela_id');
     }

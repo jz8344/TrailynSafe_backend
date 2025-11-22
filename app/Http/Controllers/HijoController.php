@@ -10,7 +10,7 @@ class HijoController extends Controller
 {
     public function index()
     {
-        return response()->json(Hijo::with(['padre', 'escuela'])->orderByDesc('id')->get());
+        return response()->json(Hijo::with(['padre', 'datosEscuela'])->orderByDesc('id')->get());
     }
 
     public function store(Request $request)
@@ -27,12 +27,12 @@ class HijoController extends Controller
             return response()->json($validator->errors(), 422);
         }
         $hijo = Hijo::create($validator->validated());
-        return response()->json($hijo->load(['padre', 'escuela']), 201);
+        return response()->json($hijo->load(['padre', 'datosEscuela']), 201);
     }
 
     public function show($id)
     {
-        $hijo = Hijo::with(['padre', 'escuela'])->find($id);
+        $hijo = Hijo::with(['padre', 'datosEscuela'])->find($id);
         if (!$hijo) return response()->json(['error' => 'No encontrado'], 404);
         return response()->json($hijo);
     }
@@ -57,7 +57,7 @@ class HijoController extends Controller
         
         // Solo actualizar los campos validados (excluyendo codigo_qr automáticamente)
         $hijo->update($validator->validated());
-        return response()->json($hijo->fresh()->load(['padre', 'escuela']));
+        return response()->json($hijo->fresh()->load(['padre', 'datosEscuela']));
     }
 
     public function destroy($id)
@@ -72,20 +72,20 @@ class HijoController extends Controller
     public function userIndex(Request $request)
     {
         $user = auth()->user();
-        $hijos = Hijo::with('escuela')->where('padre_id', $user->id)->orderByDesc('id')->get();
+        $hijos = Hijo::with('datosEscuela')->where('padre_id', $user->id)->orderByDesc('id')->get();
 
         // Transformar para que el campo 'escuela' sea el nombre de la escuela (string)
         // para mantener compatibilidad con la app móvil que espera un string
         $hijos->transform(function ($hijo) {
-            if ($hijo->relationLoaded('escuela')) {
-                if ($hijo->escuela) {
-                    $nombreEscuela = $hijo->escuela->nombre;
-                    $hijo->unsetRelation('escuela');
+            if ($hijo->relationLoaded('datosEscuela')) {
+                if ($hijo->datosEscuela) {
+                    $nombreEscuela = $hijo->datosEscuela->nombre;
+                    $hijo->unsetRelation('datosEscuela');
                     $hijo->setAttribute('escuela', $nombreEscuela);
                 } else {
                     // Si la relación es nula (no hay escuela_id), eliminamos la relación
                     // para que se use el atributo 'escuela' (string) si existe en la BD (legacy)
-                    $hijo->unsetRelation('escuela');
+                    $hijo->unsetRelation('datosEscuela');
                 }
             }
             return $hijo;
@@ -118,14 +118,14 @@ class HijoController extends Controller
         $hijo = Hijo::create($data);
         
         // Cargar relación y transformar a string para compatibilidad
-        $hijo->load('escuela');
-        if ($hijo->relationLoaded('escuela')) {
-            if ($hijo->escuela) {
-                $nombreEscuela = $hijo->escuela->nombre;
-                $hijo->unsetRelation('escuela');
+        $hijo->load('datosEscuela');
+        if ($hijo->relationLoaded('datosEscuela')) {
+            if ($hijo->datosEscuela) {
+                $nombreEscuela = $hijo->datosEscuela->nombre;
+                $hijo->unsetRelation('datosEscuela');
                 $hijo->setAttribute('escuela', $nombreEscuela);
             } else {
-                $hijo->unsetRelation('escuela');
+                $hijo->unsetRelation('datosEscuela');
             }
         }
 
