@@ -84,15 +84,9 @@ class ConfirmacionViajeController extends Controller
                 ->where('es_plantilla', true) // Asegurar que solo buscamos plantillas
                 ->whereNotNull('dias_semana') // Es recurrente
                 ->where(function($q) use ($hoy) {
-                    // Verificar vigencia de fechas (inicio y fin)
-                    $q->where(function($sub) use ($hoy) {
-                        $sub->whereNull('fecha_inicio')
-                            ->orWhereDate('fecha_inicio', '<=', $hoy);
-                    })
-                    ->where(function($sub) use ($hoy) {
-                        $sub->whereNull('fecha_fin')
-                            ->orWhereDate('fecha_fin', '>=', $hoy);
-                    });
+                    // Verificar vigencia de fechas (solo fin, inicio es implícito desde creación)
+                    $q->whereNull('fecha_fin')
+                      ->orWhereDate('fecha_fin', '>=', $hoy);
                 })
                 ->get();
 
