@@ -5,11 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <title>Código de Seguridad - Trailyn Safe</title>
-    <!--[if mso]>
-    <style type="text/css">
-        table {border-collapse: collapse;}
-    </style>
-    <![endif]-->
 </head>
 <body style="margin: 0; padding: 0; background-color: #eff6ff; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; -webkit-font-smoothing: antialiased;">
     
@@ -28,7 +23,7 @@
                     <!-- Header -->
                     <tr>
                         <td style="padding: 36px 32px 28px 32px; text-align: center; border-bottom: 1px solid #e0f2fe;">
-                            <img src="https://ibb.co/Xk4kvWzj" alt="Trailyn Safe" width="160" style="display: block; margin: 0 auto;">
+                            <img src="https://i.ibb.co/G3J3bdVn/logo.png" alt="Trailyn Safe" width="160" style="display: block; margin: 0 auto;">
                         </td>
                     </tr>
                     
