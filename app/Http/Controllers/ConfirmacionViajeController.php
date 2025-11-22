@@ -255,10 +255,14 @@ class ConfirmacionViajeController extends Controller
             $confirmacion->load(['hijo.escuela', 'viaje']);
 
             // Transformar hijo.escuela a string para compatibilidad
-            if ($confirmacion->hijo && $confirmacion->hijo->relationLoaded('escuela') && $confirmacion->hijo->escuela) {
-                $nombreEscuela = $confirmacion->hijo->escuela->nombre;
-                $confirmacion->hijo->unsetRelation('escuela');
-                $confirmacion->hijo->setAttribute('escuela', $nombreEscuela);
+            if ($confirmacion->hijo && $confirmacion->hijo->relationLoaded('escuela')) {
+                if ($confirmacion->hijo->escuela) {
+                    $nombreEscuela = $confirmacion->hijo->escuela->nombre;
+                    $confirmacion->hijo->unsetRelation('escuela');
+                    $confirmacion->hijo->setAttribute('escuela', $nombreEscuela);
+                } else {
+                    $confirmacion->hijo->unsetRelation('escuela');
+                }
             }
 
             return response()->json([
@@ -374,10 +378,14 @@ class ConfirmacionViajeController extends Controller
 
             // Transformar hijo.escuela a string para compatibilidad
             $confirmaciones->transform(function ($conf) {
-                if ($conf->hijo && $conf->hijo->relationLoaded('escuela') && $conf->hijo->escuela) {
-                    $nombreEscuela = $conf->hijo->escuela->nombre;
-                    $conf->hijo->unsetRelation('escuela');
-                    $conf->hijo->setAttribute('escuela', $nombreEscuela);
+                if ($conf->hijo && $conf->hijo->relationLoaded('escuela')) {
+                    if ($conf->hijo->escuela) {
+                        $nombreEscuela = $conf->hijo->escuela->nombre;
+                        $conf->hijo->unsetRelation('escuela');
+                        $conf->hijo->setAttribute('escuela', $nombreEscuela);
+                    } else {
+                        $conf->hijo->unsetRelation('escuela');
+                    }
                 }
                 return $conf;
             });

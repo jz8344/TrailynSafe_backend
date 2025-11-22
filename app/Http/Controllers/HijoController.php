@@ -77,10 +77,16 @@ class HijoController extends Controller
         // Transformar para que el campo 'escuela' sea el nombre de la escuela (string)
         // para mantener compatibilidad con la app móvil que espera un string
         $hijos->transform(function ($hijo) {
-            if ($hijo->relationLoaded('escuela') && $hijo->escuela) {
-                $nombreEscuela = $hijo->escuela->nombre;
-                $hijo->unsetRelation('escuela');
-                $hijo->setAttribute('escuela', $nombreEscuela);
+            if ($hijo->relationLoaded('escuela')) {
+                if ($hijo->escuela) {
+                    $nombreEscuela = $hijo->escuela->nombre;
+                    $hijo->unsetRelation('escuela');
+                    $hijo->setAttribute('escuela', $nombreEscuela);
+                } else {
+                    // Si la relación es nula (no hay escuela_id), eliminamos la relación
+                    // para que se use el atributo 'escuela' (string) si existe en la BD (legacy)
+                    $hijo->unsetRelation('escuela');
+                }
             }
             return $hijo;
         });
@@ -113,10 +119,14 @@ class HijoController extends Controller
         
         // Cargar relación y transformar a string para compatibilidad
         $hijo->load('escuela');
-        if ($hijo->relationLoaded('escuela') && $hijo->escuela) {
-            $nombreEscuela = $hijo->escuela->nombre;
-            $hijo->unsetRelation('escuela');
-            $hijo->setAttribute('escuela', $nombreEscuela);
+        if ($hijo->relationLoaded('escuela')) {
+            if ($hijo->escuela) {
+                $nombreEscuela = $hijo->escuela->nombre;
+                $hijo->unsetRelation('escuela');
+                $hijo->setAttribute('escuela', $nombreEscuela);
+            } else {
+                $hijo->unsetRelation('escuela');
+            }
         }
 
         return response()->json($hijo, 201);
