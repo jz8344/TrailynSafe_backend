@@ -81,10 +81,18 @@ class ConfirmacionViajeController extends Controller
             // que coincidan con el día de la semana actual y estén vigentes
             $plantillas = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->where('tipo_viaje', 'ida')
+                ->where('es_plantilla', true) // Asegurar que solo buscamos plantillas
                 ->whereNotNull('dias_semana') // Es recurrente
                 ->where(function($q) use ($hoy) {
-                    $q->whereNull('fecha_fin')
-                      ->orWhereDate('fecha_fin', '>=', $hoy);
+                    // Verificar vigencia de fechas (inicio y fin)
+                    $q->where(function($sub) use ($hoy) {
+                        $sub->whereNull('fecha_inicio')
+                            ->orWhereDate('fecha_inicio', '<=', $hoy);
+                    })
+                    ->where(function($sub) use ($hoy) {
+                        $sub->whereNull('fecha_fin')
+                            ->orWhereDate('fecha_fin', '>=', $hoy);
+                    });
                 })
                 ->get();
 
@@ -97,10 +105,7 @@ class ConfirmacionViajeController extends Controller
                         ->whereDate('fecha_viaje', $hoy)
                         ->exists();
                     
-                    // También verificar si la propia plantilla tiene fecha de hoy (caso legacy o mal configurado)
-                    $esMismaFecha = $plantilla->fecha_viaje && $plantilla->fecha_viaje->isToday();
-
-                    if (!$instanciaExistente && !$esMismaFecha) {
+                    if (!$instanciaExistente) {
                         \Log::info('Generando instancia automática para viaje recurrente', ['plantilla_id' => $plantilla->id]);
                         
                         // Clonar la plantilla para crear la instancia de hoy
@@ -113,8 +118,6 @@ class ConfirmacionViajeController extends Controller
                         
                         // Calcular estado inicial basado en la hora
                         $estadoInicial = $plantilla->calcularEstadoActual();
-                        // Forzar estado pendiente o abierto si es temprano, para evitar que nazca "completado" si hay desfase
-                        // Pero calcularEstadoActual ya maneja lógica de horas.
                         
                         $nuevaInstancia->estado = $estadoInicial;
                         $nuevaInstancia->save();
@@ -152,6 +155,7 @@ class ConfirmacionViajeController extends Controller
             // Solo mostrar viajes que YA tienen fecha_viaje registrada (el admin ya los activó para hoy o se autogeneraron)
             $viajes = Viaje::whereIn('escuela_id', $escuelaIds)
                 ->where('tipo_viaje', 'ida') // Solo viajes de ida tienen confirmación
+                ->where('es_plantilla', false) // Solo instancias concretas
                 ->whereDate('fecha_viaje', $hoy) // Solo viajes activos para hoy
                 ->orderBy('hora_inicio_viaje', 'asc')
                 ->get();

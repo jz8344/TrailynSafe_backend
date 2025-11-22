@@ -38,15 +38,31 @@ class Viaje extends Model
         'dias_semana' => 'array',
         'fecha_viaje' => 'date',
         'fecha_fin' => 'date',
-        'hora_inicio_confirmacion' => 'datetime:H:i:s',
-        'hora_fin_confirmacion' => 'datetime:H:i:s',
-        'hora_inicio_viaje' => 'datetime:H:i:s',
-        'hora_llegada_estimada' => 'datetime:H:i:s',
+        'hora_inicio_confirmacion' => 'string', // Mantener como string H:i:s para comparaciones directas
+        'hora_fin_confirmacion' => 'string',
+        'hora_inicio_viaje' => 'string',
+        'hora_llegada_estimada' => 'string',
         'capacidad_maxima' => 'integer',
         'ninos_confirmados' => 'integer',
         'confirmacion_automatica' => 'boolean',
         'es_plantilla' => 'boolean'
     ];
+
+    /**
+     * Scope para obtener solo plantillas (configuraciones recurrentes)
+     */
+    public function scopePlantillas($query)
+    {
+        return $query->where('es_plantilla', true);
+    }
+
+    /**
+     * Scope para obtener viajes individuales (instancias o viajes únicos)
+     */
+    public function scopeInstancias($query)
+    {
+        return $query->where('es_plantilla', false);
+    }
 
     /**
      * Relación con la escuela
@@ -129,15 +145,25 @@ class Viaje extends Model
     }
 
     /**
-     * Verifica si el periodo de confirmación está abierto
+     * Verifica si el periodo de confirmación está abierto para HOY
      */
     public function enPeriodoConfirmacion()
     {
-        $ahora = now();
-        $inicio = $ahora->copy()->setTimeFromTimeString($this->hora_inicio_confirmacion);
-        $fin = $ahora->copy()->setTimeFromTimeString($this->hora_fin_confirmacion);
+        // Solo las instancias tienen fecha de viaje válida para confirmar
+        if ($this->es_plantilla || !$this->fecha_viaje) {
+            return false;
+        }
 
-        return $ahora->between($inicio, $fin) && $this->fecha_viaje->isToday();
+        // Verificar que sea el día del viaje
+        if (!$this->fecha_viaje->isToday()) {
+            return false;
+        }
+
+        $ahora = now();
+        $horaActual = $ahora->format('H:i:s');
+
+        return $horaActual >= $this->hora_inicio_confirmacion && 
+               $horaActual <= $this->hora_fin_confirmacion;
     }
 
     /**
@@ -167,132 +193,74 @@ class Viaje extends Model
     }
 
     /**
-     * Verifica si hoy es un día válido para este viaje
+     * Verifica si hoy es un día válido para este viaje (para plantillas)
      */
     public function esHoyDiaValido()
     {
         if (empty($this->dias_semana)) {
-            return true;
+            return false;
         }
 
-        $diaSemana = strtolower(now()->locale('es')->dayName);
+        // 0=Domingo, 1=Lunes, ..., 6=Sábado
+        $diaSemana = now()->dayOfWeek;
         return in_array($diaSemana, $this->dias_semana);
     }
 
     /**
-     * Verifica si el viaje puede ser activado para hoy
-     * Un viaje recurrente puede activarse si:
-     * 1. Tiene dias_semana configurados (es recurrente)
-     * 2. Hoy es uno de esos días
-     * 3. No está activado ya para hoy (fecha_viaje != hoy)
-     * 4. No ha llegado a su fecha_fin
-     */
-    public function puedeActivarHoy()
-    {
-        // Si no es recurrente, no se puede activar manualmente
-        if (empty($this->dias_semana)) {
-            return false;
-        }
-
-        // Verificar que hoy sea un día válido
-        $numeroDiaHoy = now()->dayOfWeek; // 0=Domingo, 1=Lunes, ..., 6=Sábado
-        if (!in_array($numeroDiaHoy, $this->dias_semana)) {
-            return false;
-        }
-
-        // Verificar que no haya pasado la fecha_fin
-        if ($this->fecha_fin && now()->toDateString() > $this->fecha_fin) {
-            return false;
-        }
-
-        // Verificar que no esté activado ya para hoy
-        if ($this->fecha_viaje && $this->fecha_viaje->toDateString() === now()->toDateString()) {
-            return false;
-        }
-
-        return true;
-    }
-
-    /**
      * Calcula el estado actual del viaje basado en horarios y fecha
+     * Solo aplica para instancias (viajes reales del día)
      */
     public function calcularEstadoActual()
     {
-        // Si no tiene fecha_viaje, está en espera de ser activado
-        if (!$this->fecha_viaje) {
-            return 'pendiente';
+        // Si es plantilla, su estado es irrelevante para el flujo operativo diario
+        if ($this->es_plantilla) {
+            return 'plantilla';
+        }
+
+        // Si el viaje ya fue marcado como completado o cancelado manualmente, respetar ese estado
+        if (in_array($this->estado, ['completado', 'cancelado'])) {
+            return $this->estado;
         }
 
         $ahora = now();
-        $fechaHoy = $ahora->toDateString();
+        
+        // Si la fecha del viaje no es hoy
+        if (!$this->fecha_viaje->isToday()) {
+            if ($this->fecha_viaje->isPast()) {
+                return 'completado'; // O vencido
+            }
+            return 'pendiente'; // Futuro
+        }
+
         $horaActual = $ahora->format('H:i:s');
 
-        // Si la fecha_viaje no es hoy, verificar si ya pasó o aún no llega
-        if ($this->fecha_viaje->toDateString() !== $fechaHoy) {
-            if ($this->fecha_viaje->isPast()) {
-                return 'completado'; // Ya pasó
-            }
-            return 'pendiente'; // Aún no llega
-        }
-
-        // Si es hoy, determinar estado según horarios
-        $horaInicioConf = $this->hora_inicio_confirmacion ? substr($this->hora_inicio_confirmacion, 11) : null;
-        $horaFinConf = $this->hora_fin_confirmacion ? substr($this->hora_fin_confirmacion, 11) : null;
-        $horaInicioViaje = $this->hora_inicio_viaje ? substr($this->hora_inicio_viaje, 11) : null;
-        $horaLlegada = $this->hora_llegada_estimada ? substr($this->hora_llegada_estimada, 11) : null;
-
-        // Viaje de retorno sin confirmación
-        if ($this->tipo_viaje === 'retorno' || !$horaInicioConf) {
-            if ($horaLlegada && $horaActual >= $horaLlegada) {
-                return 'completado';
-            }
-            if ($horaInicioViaje && $horaActual >= $horaInicioViaje) {
-                return 'en_curso';
-            }
+        // Lógica de estados basada en horario
+        if ($horaActual < $this->hora_inicio_confirmacion) {
             return 'pendiente';
         }
+        
+        if ($horaActual >= $this->hora_inicio_confirmacion && $horaActual <= $this->hora_fin_confirmacion) {
+            return 'confirmaciones_abiertas';
+        }
 
-        // Viaje de ida con confirmación
-        if ($horaLlegada && $horaActual >= $horaLlegada) {
-            return 'completado';
-        }
-        if ($horaInicioViaje && $horaActual >= $horaInicioViaje) {
-            return 'en_curso';
-        }
-        if ($horaFinConf && $horaActual >= $horaFinConf) {
+        if ($horaActual > $this->hora_fin_confirmacion && $horaActual < $this->hora_inicio_viaje) {
             return 'confirmaciones_cerradas';
         }
-        if ($horaInicioConf && $horaActual >= $horaInicioConf) {
-            return 'confirmaciones_abiertas';
+
+        if ($horaActual >= $this->hora_inicio_viaje) {
+            // Si ya pasó la hora de inicio, asumimos en curso hasta que el chofer lo finalice
+            // O hasta cierta hora límite
+            return 'en_curso';
         }
 
         return 'pendiente';
     }
 
     /**
-     * Verifica si está en período de confirmación
+     * Alias para enPeriodoConfirmacion para compatibilidad
      */
     public function estaEnPeriodoConfirmacion()
     {
-        if ($this->tipo_viaje === 'retorno') {
-            return false; // Los viajes de retorno no tienen período de confirmación
-        }
-
-        if (!$this->fecha_viaje) {
-            return false; // Sin fecha no hay período
-        }
-
-        $ahora = now();
-        $fechaHoy = $ahora->toDateString();
-
-        // Verificar si hoy es la fecha del viaje
-        if ($this->fecha_viaje->toDateString() !== $fechaHoy) {
-            return false;
-        }
-
-        // Verificar horario
-        $horaActual = $ahora->format('H:i:s');
-        return $horaActual >= $this->hora_inicio_confirmacion 
-            && $horaActual <= $this->hora_fin_confirmacion;
+        return $this->enPeriodoConfirmacion();
     }
 }
