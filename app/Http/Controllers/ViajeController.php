@@ -73,7 +73,8 @@ class ViajeController extends Controller
     {
         \Log::info('Creating viaje with data:', $request->all());
         
-        $esRecurrente = $request->boolean('es_recurrente');
+        // Determinar si es recurrente: explícito o implícito por presencia de dias_semana
+        $esRecurrente = $request->boolean('es_recurrente') || ($request->has('dias_semana') && !empty($request->dias_semana));
 
         $rules = [
             'nombre_ruta' => ['required', 'string', 'max:255'],
@@ -82,10 +83,11 @@ class ViajeController extends Controller
             'chofer_id' => 'nullable|exists:choferes,id',
             'unidad_id' => 'nullable|exists:unidades,id',
             'capacidad_maxima' => 'required_without:unidad_id|integer|min:1',
-            'hora_inicio_confirmacion' => 'required|date_format:H:i',
-            'hora_fin_confirmacion' => 'required|date_format:H:i|after:hora_inicio_confirmacion',
-            'hora_inicio_viaje' => 'required|date_format:H:i|after:hora_fin_confirmacion',
-            'hora_llegada_estimada' => 'required|date_format:H:i|after:hora_inicio_viaje',
+            // Permitir formato H:i o H:i:s
+            'hora_inicio_confirmacion' => ['required', 'regex:/^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/'],
+            'hora_fin_confirmacion' => ['required', 'regex:/^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/', 'after:hora_inicio_confirmacion'],
+            'hora_inicio_viaje' => ['required', 'regex:/^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/', 'after:hora_fin_confirmacion'],
+            'hora_llegada_estimada' => ['required', 'regex:/^([01]?[0-9]|2[0-3]):[0-5][0-9](:[0-5][0-9])?$/', 'after:hora_inicio_viaje'],
             'notas' => 'nullable|string',
             'crear_retorno' => 'nullable|boolean'
         ];
@@ -121,11 +123,20 @@ class ViajeController extends Controller
                 }
             }
 
-            // Formatear horas a H:i:s
-            $horaInicioConf = $request->hora_inicio_confirmacion . ':00';
-            $horaFinConf = $request->hora_fin_confirmacion . ':00';
-            $horaInicioViaje = $request->hora_inicio_viaje . ':00';
-            $horaLlegada = $request->hora_llegada_estimada . ':00';
+            // Formatear horas a H:i:s (asegurar formato correcto para DB)
+            $formatTime = function($time) {
+                // Si ya tiene segundos (H:i:s), devolver tal cual
+                if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $time)) {
+                    return $time;
+                }
+                // Si es H:i, agregar :00
+                return $time . ':00';
+            };
+
+            $horaInicioConf = $formatTime($request->hora_inicio_confirmacion);
+            $horaFinConf = $formatTime($request->hora_fin_confirmacion);
+            $horaInicioViaje = $formatTime($request->hora_inicio_viaje);
+            $horaLlegada = $formatTime($request->hora_llegada_estimada);
 
             $viaje = Viaje::create([
                 'nombre_ruta' => $request->nombre_ruta,
