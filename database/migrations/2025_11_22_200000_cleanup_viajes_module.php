@@ -12,9 +12,8 @@ return new class extends Migration
     public function up(): void
     {
         // Eliminar tablas dependientes primero (identificadas por error de FK)
-        Schema::dropIfExists('telemetria_chofer');
-        Schema::dropIfExists('ubicaciones_bus');
-        Schema::dropIfExists('confirmaciones_viaje');
+        Schema::dropIfExists('viaje_solicitudes');
+        Schema::dropIfExists('viajes');
 
         // Eliminar tablas relacionadas con el módulo de viajes si existen
         Schema::dropIfExists('viajes');
