@@ -19,7 +19,7 @@ return new class extends Migration
             $table->text('descripcion')->nullable();
             
             // Relaciones (1:1 con viajes)
-            $table->foreignId('viaje_id')->constrained('viajes')->onDelete('cascade');
+            $table->unsignedBigInteger('viaje_id'); // Foreign key se agregará después
             $table->foreignId('escuela_id')->constrained('escuelas')->onDelete('restrict');
             
             // Datos calculados por k-Means
@@ -37,14 +37,8 @@ return new class extends Migration
             $table->timestamps();
             
             // Índices
-            $table->unique('viaje_id'); // Relación 1:1
+            $table->index('viaje_id');
             $table->index('estado');
-        });
-        
-        // Agregar foreign key a viajes después de crear rutas
-        Schema::table('viajes', function (Blueprint $table) {
-            // Ya está creado en la migración anterior, pero sin constraint
-            // porque rutas no existía. Ahora agregamos el constraint completo.
         });
     }
 

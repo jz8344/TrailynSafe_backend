@@ -47,7 +47,7 @@ return new class extends Migration
             $table->foreignId('escuela_id')->constrained('escuelas')->onDelete('restrict');
             $table->foreignId('unidad_id')->constrained('unidades')->onDelete('restrict');
             $table->foreignId('chofer_id')->constrained('choferes')->onDelete('restrict');
-            $table->foreignId('ruta_id')->nullable()->constrained('rutas')->onDelete('set null');
+            $table->unsignedBigInteger('ruta_id')->nullable(); // Foreign key se agregará en migración posterior
             
             // Cupos y confirmaciones
             $table->integer('cupo_minimo')->default(5);
