@@ -79,7 +79,7 @@ class ViajeController extends Controller
                 $rules['fecha_inicio_recurrencia'] = 'required|date|after_or_equal:today';
                 $rules['fecha_fin_recurrencia'] = 'required|date|after:fecha_inicio_recurrencia';
                 $rules['dias_semana'] = 'required|array|min:1';
-                $rules['dias_semana.*'] = 'in:lunes,martes,miercoles,jueves,viernes,sabado,domingo';
+                $rules['dias_semana.*'] = 'integer|min:0|max:6'; // 0=Domingo, 6=Sábado
             }
             
             $validator = Validator::make($request->all(), $rules);
@@ -114,24 +114,14 @@ class ViajeController extends Controller
                 $fechaFin = Carbon::parse($request->fecha_fin_recurrencia);
                 
                 // Verificar que al menos uno de los días seleccionados exista en el rango
-                $diasSeleccionados = $request->dias_semana;
+                $diasSeleccionados = $request->dias_semana; // Array de números 0-6
                 $diasDisponibles = [];
-                
-                $mapaDias = [
-                    0 => 'domingo',
-                    1 => 'lunes',
-                    2 => 'martes',
-                    3 => 'miercoles',
-                    4 => 'jueves',
-                    5 => 'viernes',
-                    6 => 'sabado'
-                ];
                 
                 $fecha = $fechaInicio->copy();
                 while ($fecha->lte($fechaFin)) {
-                    $diaNombre = $mapaDias[$fecha->dayOfWeek];
-                    if (!in_array($diaNombre, $diasDisponibles)) {
-                        $diasDisponibles[] = $diaNombre;
+                    $diaNumero = $fecha->dayOfWeek; // 0=Domingo, 6=Sábado
+                    if (!in_array($diaNumero, $diasDisponibles)) {
+                        $diasDisponibles[] = $diaNumero;
                     }
                     $fecha->addDay();
                 }
