@@ -14,6 +14,10 @@ use App\Http\Controllers\UnidadController;
 use App\Http\Controllers\EscuelaController;
 use App\Http\Controllers\ImpresionController;
 use App\Http\Controllers\BackupController;
+use App\Http\Controllers\ViajeController;
+use App\Http\Controllers\RutaController;
+use App\Http\Controllers\ConfirmacionController;
+use App\Http\Controllers\AsistenciaController;
 
 // Rutas públicas para usuarios
 Route::post('/register', [UsuarioController::class, 'register']);
@@ -53,6 +57,14 @@ Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class]
     
     // Google Auth - Desconectar cuenta
     Route::post('/auth/google/disconnect', [GoogleAuthController::class, 'disconnectGoogle']);
+    
+    // Viajes - Usuarios/Padres
+    Route::get('/viajes/disponibles', [ViajeController::class, 'viajesDisponibles']);
+    Route::post('/viajes/{viaje_id}/confirmar', [ConfirmacionController::class, 'confirmar']);
+    Route::put('/confirmaciones/{confirmacion_id}/direccion', [ConfirmacionController::class, 'actualizarDireccion']);
+    Route::delete('/confirmaciones/{confirmacion_id}', [ConfirmacionController::class, 'cancelar']);
+    Route::get('/confirmaciones/mis-confirmaciones', [ConfirmacionController::class, 'misConfirmaciones']);
+    Route::get('/hijos/{hijo_id}/asistencias', [AsistenciaController::class, 'historialHijo']);
 });
 
 // Rutas protegidas para administradores
@@ -111,6 +123,44 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
     Route::put('/admin/notificaciones/read-all', [App\Http\Controllers\NotificacionPanelController::class, 'markAllAsRead']);
     Route::delete('/admin/notificaciones/{id}', [App\Http\Controllers\NotificacionPanelController::class, 'destroy']);
     Route::delete('/admin/notificaciones', [App\Http\Controllers\NotificacionPanelController::class, 'destroyAll']);
+    
+    // CRUD Viajes
+    Route::get('/admin/viajes', [ViajeController::class, 'index']);
+    Route::post('/admin/viajes', [ViajeController::class, 'store']);
+    Route::get('/admin/viajes/{id}', [ViajeController::class, 'show']);
+    Route::put('/admin/viajes/{id}', [ViajeController::class, 'update']);
+    Route::delete('/admin/viajes/{id}', [ViajeController::class, 'destroy']);
+    
+    // Acciones de Viajes
+    Route::put('/admin/viajes/{id}/programar', [ViajeController::class, 'programar']);
+    Route::put('/admin/viajes/{id}/cancelar', [ViajeController::class, 'cancelar']);
+    Route::put('/admin/viajes/{id}/generar-ruta', [ViajeController::class, 'generarRuta']);
+    
+    // Confirmaciones de Viajes
+    Route::get('/admin/viajes/{viaje_id}/confirmaciones', [ConfirmacionController::class, 'index']);
+    
+    // Rutas
+    Route::get('/admin/rutas', [RutaController::class, 'index']);
+    Route::get('/admin/rutas/{id}', [RutaController::class, 'show']);
+    
+    // Asistencias
+    Route::get('/admin/viajes/{viaje_id}/asistencias', [AsistenciaController::class, 'porViaje']);
+});
+
+// Rutas públicas para webhook (sin autenticación, pero con validación de token en el controller si es necesario)
+Route::post('/webhook/ruta-generada', [RutaController::class, 'recibirRutaGenerada']);
+
+// Rutas para choferes (asumiendo que usan el mismo guard que usuarios)
+Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class])->group(function () {
+    // Rutas para choferes
+    Route::get('/chofer/rutas', [RutaController::class, 'rutasChofer']);
+    Route::put('/chofer/rutas/{ruta_id}/iniciar', [RutaController::class, 'iniciarRuta']);
+    Route::put('/chofer/rutas/{ruta_id}/completar', [RutaController::class, 'completarRuta']);
+    Route::put('/chofer/paradas/{parada_id}/llegar', [RutaController::class, 'llegarAParada']);
+    
+    // Asistencias - Chofer
+    Route::post('/chofer/asistencias', [AsistenciaController::class, 'registrar']);
+    Route::post('/chofer/asistencias/ausente', [AsistenciaController::class, 'marcarAusente']);
 });
 
 
