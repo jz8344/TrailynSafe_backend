@@ -155,7 +155,7 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
 Route::post('/webhook/ruta-generada', [RutaController::class, 'recibirRutaGenerada']);
 
 // Rutas protegidas para choferes
-Route::middleware(['auth:sanctum'])->prefix('chofer')->group(function () {
+Route::middleware(['auth:chofer-sanctum'])->prefix('chofer')->group(function () {
     // Autenticación
     Route::post('/logout', [App\Http\Controllers\ChoferAuthController::class, 'logout']);
     Route::get('/profile', [App\Http\Controllers\ChoferAuthController::class, 'profile']);

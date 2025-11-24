@@ -180,15 +180,13 @@ class RutaController extends Controller
     public function rutasChofer(Request $request)
     {
         try {
-            $user = auth()->user();
-            
-            // Obtener chofer del usuario
-            $chofer = $user->chofer;
+            // Con el guard chofer-sanctum, auth()->user() ya es un Chofer
+            $chofer = auth('chofer-sanctum')->user();
             
             if (!$chofer) {
                 return response()->json([
-                    'error' => 'Usuario no es un chofer registrado'
-                ], 403);
+                    'error' => 'Chofer no autenticado'
+                ], 401);
             }
             
             // Obtener viajes del chofer con ruta lista
@@ -225,8 +223,7 @@ class RutaController extends Controller
             $ruta = Ruta::with('viaje')->findOrFail($rutaId);
             
             // Validar que el chofer tenga permisos
-            $user = auth()->user();
-            $chofer = $user->chofer;
+            $chofer = auth('chofer-sanctum')->user();
             
             if (!$chofer || $ruta->viaje->chofer_id !== $chofer->id) {
                 return response()->json([
@@ -271,8 +268,7 @@ class RutaController extends Controller
             $parada = ParadaRuta::with(['ruta.viaje'])->findOrFail($paradaId);
             
             // Validar permisos
-            $user = auth()->user();
-            $chofer = $user->chofer;
+            $chofer = auth('chofer-sanctum')->user();
             
             if (!$chofer || $parada->ruta->viaje->chofer_id !== $chofer->id) {
                 return response()->json([
@@ -303,8 +299,7 @@ class RutaController extends Controller
             $ruta = Ruta::with('viaje')->findOrFail($rutaId);
             
             // Validar permisos
-            $user = auth()->user();
-            $chofer = $user->chofer;
+            $chofer = auth('chofer-sanctum')->user();
             
             if (!$chofer || $ruta->viaje->chofer_id !== $chofer->id) {
                 return response()->json([
