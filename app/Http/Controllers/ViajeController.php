@@ -465,6 +465,29 @@ class ViajeController extends Controller
                 ->whereIn('estado', ['programado', 'en_confirmaciones'])
                 ->get();
 
+            // Log para depuración: volcar campos clave de los candidatos
+            try {
+                $debugArr = $candidates->map(function($v) {
+                    return [
+                        'id' => $v->id,
+                        'estado' => $v->estado,
+                        'tipo_viaje' => $v->tipo_viaje,
+                        'fecha_viaje' => $v->fecha_viaje?->format('Y-m-d'),
+                        'fecha_inicio_recurrencia' => $v->fecha_inicio_recurrencia?->format('Y-m-d'),
+                        'fecha_fin_recurrencia' => $v->fecha_fin_recurrencia?->format('Y-m-d'),
+                        'hora_inicio_confirmaciones' => $v->hora_inicio_confirmaciones?->format('H:i:s'),
+                        'hora_fin_confirmaciones' => $v->hora_fin_confirmaciones?->format('H:i:s'),
+                        'dias_semana' => $v->dias_semana,
+                        'confirmaciones_actuales' => $v->confirmaciones_actuales,
+                        'cupo_maximo' => $v->cupo_maximo,
+                    ];
+                })->toArray();
+
+                Log::info('viajesDisponibles - candidatos: ' . json_encode($debugArr));
+            } catch (\Exception $logEx) {
+                Log::warning('viajesDisponibles - error al generar debugArr: ' . $logEx->getMessage());
+            }
+
             $disponibles = $candidates->filter(function($viaje) use ($now) {
                 // Si ya está en 'en_confirmaciones', aplicar la regla existente
                 if ($viaje->estado === 'en_confirmaciones') {
