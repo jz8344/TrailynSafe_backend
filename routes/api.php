@@ -172,6 +172,8 @@ Route::middleware(['auth:chofer-sanctum'])->prefix('chofer')->group(function () 
     // Gestión de viajes
     Route::get('/viajes', [ViajeController::class, 'viajesChofer']);
     Route::post('/viajes/{viaje_id}/abrir-confirmaciones', [ViajeController::class, 'abrirConfirmacionesChofer']);
+    Route::post('/viajes/{viaje_id}/cerrar-confirmaciones', [ViajeController::class, 'cerrarConfirmacionesChofer']);
+    Route::post('/viajes/{viaje_id}/confirmar-viaje', [ViajeController::class, 'confirmarViajeChofer']);
     Route::post('/viajes/{viaje_id}/programar', [ViajeController::class, 'programarChofer']);
     Route::post('/viajes/{viaje_id}/cancelar', [ViajeController::class, 'cancelarChofer']);
     

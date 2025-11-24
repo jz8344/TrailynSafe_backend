@@ -468,8 +468,10 @@ class ViajeController extends Controller
             Log::info("viajesDisponibles - Escuelas de los hijos: " . json_encode($escuelasIds));
             
             // Buscar viajes de esas escuelas
+            // IMPORTANTE: Solo mostrar viajes en estado 'en_confirmaciones'
+            // NO mostrar viajes en estado 'programado'
             $candidates = Viaje::with(['escuela', 'unidad', 'chofer'])
-                ->whereIn('estado', ['programado', 'en_confirmaciones'])
+                ->where('estado', 'en_confirmaciones')
                 ->when($escuelasIds->isNotEmpty(), function($query) use ($escuelasIds) {
                     return $query->whereIn('escuela_id', $escuelasIds);
                 })
@@ -787,5 +789,187 @@ class ViajeController extends Controller
                 'message' => $e->getMessage()
             ], 500);
         }
+    }
+
+    /**
+     * Cerrar confirmaciones de un viaje (Chofer)
+     */
+    public function cerrarConfirmacionesChofer(Request $request, $viaje_id)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            $viaje = Viaje::with(['escuela', 'unidad', 'confirmaciones'])->findOrFail($viaje_id);
+
+            // Verificar que el viaje pertenece al chofer
+            if ($viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permiso para modificar este viaje'
+                ], 403);
+            }
+
+            // Solo se puede cerrar desde estado 'en_confirmaciones'
+            if ($viaje->estado !== 'en_confirmaciones') {
+                return response()->json([
+                    'error' => 'El viaje no está en estado de confirmaciones',
+                    'estado_actual' => $viaje->estado
+                ], 400);
+            }
+
+            $viaje->cerrarConfirmaciones();
+            $viaje->load(['escuela', 'unidad', 'ruta', 'confirmaciones']);
+
+            Log::info("Chofer {$chofer->id} cerró confirmaciones del viaje {$viaje_id}");
+
+            return response()->json([
+                'message' => 'Confirmaciones cerradas exitosamente',
+                'viaje' => $viaje,
+                'confirmaciones_total' => $viaje->confirmaciones_actuales
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Viaje no encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al cerrar confirmaciones: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al cerrar confirmaciones',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Confirmar viaje y solicitar generación de ruta con k-Means (Chofer)
+     */
+    public function confirmarViajeChofer(Request $request, $viaje_id)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            $viaje = Viaje::with(['escuela', 'unidad', 'confirmaciones.hijo', 'confirmaciones.padre'])
+                ->findOrFail($viaje_id);
+
+            // Verificar que el viaje pertenece al chofer
+            if ($viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permiso para modificar este viaje'
+                ], 403);
+            }
+
+            // Solo se puede confirmar desde estado 'confirmado'
+            if ($viaje->estado !== 'confirmado') {
+                return response()->json([
+                    'error' => 'El viaje debe estar en estado confirmado para generar ruta',
+                    'estado_actual' => $viaje->estado
+                ], 400);
+            }
+
+            // Verificar que hay confirmaciones
+            if ($viaje->confirmaciones_actuales < 1) {
+                return response()->json([
+                    'error' => 'No hay confirmaciones para generar la ruta'
+                ], 400);
+            }
+
+            // Cambiar estado a 'generando_ruta'
+            $viaje->iniciarGeneracionRuta();
+
+            Log::info("Chofer {$chofer->id} confirmó viaje {$viaje_id}, iniciando generación de ruta");
+
+            // Llamar a Django para generar ruta con k-Means
+            try {
+                $this->solicitarGeneracionRuta($viaje);
+            } catch (\Exception $e) {
+                Log::error("Error al solicitar generación de ruta: " . $e->getMessage());
+                // Revertir estado
+                $viaje->estado = 'confirmado';
+                $viaje->save();
+                
+                return response()->json([
+                    'error' => 'Error al iniciar generación de ruta',
+                    'message' => $e->getMessage()
+                ], 500);
+            }
+
+            return response()->json([
+                'message' => 'Generación de ruta iniciada exitosamente. Esto puede tardar unos minutos.',
+                'viaje' => $viaje->load(['escuela', 'unidad', 'ruta'])
+            ], 200);
+
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Viaje no encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al confirmar viaje: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al confirmar viaje',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Solicitar generación de ruta a Django
+     */
+    private function solicitarGeneracionRuta($viaje)
+    {
+        $djangoUrl = env('DJANGO_API_URL', 'https://backend-django-production-6d57.up.railway.app');
+        
+        // Preparar datos para Django
+        $confirmaciones = $viaje->confirmaciones()->where('estado', 'confirmado')->get();
+        
+        $puntos = $confirmaciones->map(function($conf) {
+            return [
+                'confirmacion_id' => $conf->id,
+                'hijo_id' => $conf->hijo_id,
+                'hijo_nombre' => $conf->hijo->nombre ?? 'Sin nombre',
+                'latitud' => floatval($conf->latitud),
+                'longitud' => floatval($conf->longitud),
+                'direccion' => $conf->direccion_recogida,
+                'referencia' => $conf->referencia,
+            ];
+        })->toArray();
+
+        $destino = [
+            'escuela_id' => $viaje->escuela_id,
+            'nombre' => $viaje->escuela->nombre,
+            'latitud' => floatval($viaje->escuela->latitud ?? 0),
+            'longitud' => floatval($viaje->escuela->longitud ?? 0),
+            'direccion' => $viaje->escuela->direccion,
+        ];
+
+        $payload = [
+            'viaje_id' => $viaje->id,
+            'puntos' => $puntos,
+            'destino' => $destino,
+            'hora_salida' => $viaje->hora_salida_programada->format('H:i:s'),
+            'capacidad' => $viaje->cupo_maximo,
+            'webhook_url' => env('APP_URL') . '/api/webhook/ruta-generada'
+        ];
+
+        Log::info("Enviando solicitud de ruta a Django", ['payload' => $payload]);
+
+        // Realizar solicitud HTTP a Django
+        $client = new \GuzzleHttp\Client();
+        $response = $client->post($djangoUrl . '/api/generar-ruta', [
+            'json' => $payload,
+            'timeout' => 120, // 2 minutos timeout
+            'headers' => [
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json'
+            ]
+        ]);
+
+        $result = json_decode($response->getBody()->getContents(), true);
+        
+        Log::info("Respuesta de Django para ruta", ['result' => $result]);
+        
+        return $result;
     }
 }

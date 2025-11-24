@@ -30,6 +30,8 @@ class Escuela extends Model
         'horario_salida',
         'fecha_inicio_servicio',
         'numero_alumnos',
+        'latitud',
+        'longitud',
         'notas',
         'estado'
     ];

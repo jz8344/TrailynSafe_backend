@@ -64,6 +64,16 @@ class ConfirmacionController extends Controller
             $viaje = Viaje::findOrFail($viajeId);
             $hijo = Hijo::findOrFail($request->hijo_id);
             
+            // VALIDACIÓN CRÍTICA: Solo permitir confirmaciones si el viaje está en 'en_confirmaciones'
+            if ($viaje->estado !== 'en_confirmaciones') {
+                Log::warning("Intento de confirmar viaje {$viaje->id} en estado '{$viaje->estado}' (debe estar en 'en_confirmaciones')");
+                return response()->json([
+                    'error' => 'Este viaje no está aceptando confirmaciones actualmente',
+                    'estado_actual' => $viaje->estado,
+                    'mensaje' => 'El viaje debe estar en estado "En Confirmaciones" para poder confirmar tu participación'
+                ], 400);
+            }
+            
             // Validar que el hijo pertenezca al usuario
             if ($hijo->padre_id !== $user->id) {
                 return response()->json([

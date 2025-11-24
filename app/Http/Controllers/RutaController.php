@@ -76,23 +76,18 @@ class RutaController extends Controller
     public function recibirRutaGenerada(Request $request)
     {
         try {
+            Log::info("Webhook recibido de Django", ['payload' => $request->all()]);
+            
             $validator = Validator::make($request->all(), [
                 'viaje_id' => 'required|exists:viajes,id',
-                'ruta_optimizada' => 'required|array',
-                'ruta_optimizada.*.confirmacion_id' => 'required|exists:confirmaciones_viaje,id',
-                'ruta_optimizada.*.direccion' => 'required|string',
-                'ruta_optimizada.*.latitud' => 'required|numeric',
-                'ruta_optimizada.*.longitud' => 'required|numeric',
-                'ruta_optimizada.*.hora_estimada' => 'required|string',
-                'ruta_optimizada.*.distancia_desde_anterior_km' => 'nullable|numeric',
-                'ruta_optimizada.*.tiempo_desde_anterior_min' => 'nullable|integer',
-                'ruta_optimizada.*.cluster' => 'nullable|integer',
-                'distancia_total_km' => 'required|numeric',
-                'tiempo_total_min' => 'required|integer',
-                'parametros' => 'nullable|array'
+                'ruta' => 'required|array',
+                'ruta.ruta_optimizada' => 'required|array',
+                'ruta.distancia_total_km' => 'required|numeric',
+                'ruta.tiempo_total_min' => 'required|integer'
             ]);
             
             if ($validator->fails()) {
+                Log::error("Validación fallida en webhook", ['errors' => $validator->errors()]);
                 return response()->json([
                     'error' => 'Datos de validación incorrectos',
                     'errors' => $validator->errors()
@@ -100,11 +95,14 @@ class RutaController extends Controller
             }
             
             $viaje = Viaje::findOrFail($request->viaje_id);
+            $rutaData = $request->ruta;
             
             // Validar que el viaje esté generando ruta
             if ($viaje->estado !== 'generando_ruta') {
+                Log::warning("Viaje no está en generando_ruta", ['estado' => $viaje->estado]);
                 return response()->json([
-                    'error' => 'El viaje no está en estado de generación de ruta'
+                    'error' => 'El viaje no está en estado de generación de ruta',
+                    'estado_actual' => $viaje->estado
                 ], 422);
             }
             
@@ -114,20 +112,22 @@ class RutaController extends Controller
                 // Crear registro de ruta
                 $ruta = Ruta::create([
                     'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
-                    'descripcion' => "Ruta generada automáticamente el " . now()->format('d/m/Y H:i'),
+                    'descripcion' => "Ruta generada automáticamente con k-Means el " . now()->format('d/m/Y H:i'),
                     'viaje_id' => $viaje->id,
                     'escuela_id' => $viaje->escuela_id,
-                    'distancia_total_km' => $request->distancia_total_km,
-                    'tiempo_estimado_minutos' => $request->tiempo_total_min,
+                    'distancia_total_km' => $rutaData['distancia_total_km'],
+                    'tiempo_estimado_minutos' => $rutaData['tiempo_total_min'],
                     'estado' => 'activa',
-                    'algoritmo_utilizado' => 'k-means-clustering',
-                    'parametros_algoritmo' => json_encode($request->parametros ?? []),
+                    'algoritmo_utilizado' => 'k-means-tsp',
+                    'parametros_algoritmo' => json_encode($rutaData['parametros'] ?? []),
                     'fecha_generacion' => now()
                 ]);
                 
+                Log::info("Ruta creada", ['ruta_id' => $ruta->id]);
+                
                 // Crear paradas de la ruta
-                foreach ($request->ruta_optimizada as $index => $parada) {
-                    $paradaCreada = ParadaRuta::create([
+                foreach ($rutaData['ruta_optimizada'] as $index => $parada) {
+                    ParadaRuta::create([
                         'ruta_id' => $ruta->id,
                         'confirmacion_id' => $parada['confirmacion_id'],
                         'orden' => $index + 1,
@@ -149,8 +149,12 @@ class RutaController extends Controller
                         ]);
                 }
                 
+                Log::info("Paradas creadas", ['cantidad' => count($rutaData['ruta_optimizada'])]);
+                
                 // Actualizar viaje
                 $viaje->marcarRutaGenerada($ruta->id);
+                
+                Log::info("Viaje actualizado a ruta_generada");
                 
                 DB::commit();
                 
@@ -161,6 +165,7 @@ class RutaController extends Controller
                 ], 200);
                 
             } catch (\Exception $e) {
+                Log::error("Error en transacción de ruta", ['error' => $e->getMessage()]);
                 DB::rollBack();
                 throw $e;
             }
