@@ -456,16 +456,81 @@ class ViajeController extends Controller
                 ], 200);
             }
             
-            // Obtener viajes en confirmaciones
-            $viajes = Viaje::with(['escuela', 'unidad', 'chofer'])
-                ->enConfirmaciones()
-                ->get()
-                ->filter(function($viaje) {
+            // Obtener viajes que pueden estar abiertos a confirmaciones.
+            // Consideramos viajes cuyo estado ya es 'en_confirmaciones' y
+            // viajes 'programado' cuya ventana de confirmaciones incluye el momento actual.
+            $now = Carbon::now();
+
+            $candidates = Viaje::with(['escuela', 'unidad', 'chofer'])
+                ->whereIn('estado', ['programado', 'en_confirmaciones'])
+                ->get();
+
+            $disponibles = $candidates->filter(function($viaje) use ($now) {
+                // Si ya está en 'en_confirmaciones', aplicar la regla existente
+                if ($viaje->estado === 'en_confirmaciones') {
                     return $viaje->puedeConfirmar();
-                });
-            
-            // Verificar qué hijos ya tienen confirmación en cada viaje
-            $viajes->each(function($viaje) use ($user) {
+                }
+
+                // Si está 'programado', comprobamos si ahora está dentro de la ventana
+                try {
+                    // Para viajes únicos, la ventana se aplica sobre la fecha_viaje
+                    if ($viaje->tipo_viaje === 'unico') {
+                        if (!$viaje->fecha_viaje || !$viaje->hora_inicio_confirmaciones || !$viaje->hora_fin_confirmaciones) {
+                            return false;
+                        }
+
+                        $fecha = $viaje->fecha_viaje->format('Y-m-d');
+                        $start = Carbon::parse($fecha . ' ' . $viaje->hora_inicio_confirmaciones->format('H:i:s'));
+                        $end = Carbon::parse($fecha . ' ' . $viaje->hora_fin_confirmaciones->format('H:i:s'));
+
+                        return $now->between($start, $end) && $viaje->confirmaciones_actuales < $viaje->cupo_maximo;
+                    }
+
+                    // Para recurrentes, verificar rango de recurrencia y día de la semana
+                    if ($viaje->tipo_viaje === 'recurrente') {
+                        if (!$viaje->fecha_inicio_recurrencia || !$viaje->fecha_fin_recurrencia || !$viaje->hora_inicio_confirmaciones || !$viaje->hora_fin_confirmaciones) {
+                            return false;
+                        }
+
+                        // ¿Está hoy dentro del rango de recurrencia?
+                        if ($now->lt($viaje->fecha_inicio_recurrencia) || $now->gt($viaje->fecha_fin_recurrencia)) {
+                            return false;
+                        }
+
+                        // dias_semana puede ser array de nombres o de índices (0=domingo..6)
+                        $dias = $viaje->dias_semana ?? [];
+                        $diaHoyIndex = $now->dayOfWeek; // 0 (domingo) - 6 (sabado)
+
+                        $diaMatch = false;
+                        foreach ($dias as $d) {
+                            if (is_int($d) || ctype_digit((string)$d)) {
+                                if ((int)$d === $diaHoyIndex) { $diaMatch = true; break; }
+                            } else {
+                                // comparar por nombre (aceptamos español en minúsculas)
+                                $map = [0=>'domingo',1=>'lunes',2=>'martes',3=>'miercoles',4=>'jueves',5=>'viernes',6=>'sabado'];
+                                if (strtolower($d) === $map[$diaHoyIndex]) { $diaMatch = true; break; }
+                            }
+                        }
+
+                        if (!$diaMatch) return false;
+
+                        // Construimos ventana usando la fecha de hoy
+                        $fechaHoy = $now->format('Y-m-d');
+                        $start = Carbon::parse($fechaHoy . ' ' . $viaje->hora_inicio_confirmaciones->format('H:i:s'));
+                        $end = Carbon::parse($fechaHoy . ' ' . $viaje->hora_fin_confirmaciones->format('H:i:s'));
+
+                        return $now->between($start, $end) && $viaje->confirmaciones_actuales < $viaje->cupo_maximo;
+                    }
+                } catch (\Exception $ex) {
+                    Log::error("Error evaluando ventana de confirmaciones para viaje {$viaje->id}: {$ex->getMessage()}");
+                    return false;
+                }
+
+                return false;
+            });
+
+            // Agregar confirmaciones del usuario para cada viaje disponible
+            $disponibles->each(function($viaje) use ($user) {
                 try {
                     $viaje->confirmaciones_usuario = ConfirmacionViaje::where('viaje_id', $viaje->id)
                         ->where('padre_id', $user->id)
@@ -473,13 +538,12 @@ class ViajeController extends Controller
                         ->with('hijo')
                         ->get();
                 } catch (\Exception $ex) {
-                    // Registrar el error y continuar
                     Log::error("Error al obtener confirmaciones para viaje {$viaje->id}: {$ex->getMessage()}");
                     $viaje->confirmaciones_usuario = collect([]);
                 }
             });
-            
-            return response()->json($viajes, 200);
+
+            return response()->json($disponibles->values(), 200);
             
         } catch (\Exception $e) {
             Log::error('Error al obtener viajes disponibles: ' . $e->getMessage());
