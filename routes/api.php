@@ -37,6 +37,7 @@ Route::post('/admin/login', [AdminController::class, 'login']);
 // Rutas públicas para choferes
 Route::post('/chofer/login', [App\Http\Controllers\ChoferAuthController::class, 'login']);
 
+
 // Rutas protegidas para usuarios regulares
 Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class])->group(function () {
     Route::get('/sesion', [SessionController::class, 'index']);
