@@ -35,8 +35,8 @@ class ChoferAuthController extends Controller
             ]);
         }
 
-        // Verificar que el chofer esté activo
-        if ($chofer->estado !== 'activo') {
+        // Verificar que el chofer esté disponible (estados válidos: disponible, en_ruta, no_activo)
+        if ($chofer->estado === 'no_activo') {
             return response()->json([
                 'error' => 'Tu cuenta no está activa. Contacta al administrador.'
             ], 403);
