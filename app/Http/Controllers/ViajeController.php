@@ -446,14 +446,16 @@ class ViajeController extends Controller
                 ], 401);
             }
 
+            Log::info("viajesDisponibles - Usuario ID: {$user->id}, Nombre: {$user->nombre}");
+
             // Obtener hijos del usuario (si no tiene hijos, devolvemos vacío)
-            $hijos = $user->hijos ?? collect([]);
+            $hijos = $user->hijos()->get();
+            
+            Log::info("viajesDisponibles - Cantidad de hijos: " . $hijos->count());
 
             if ($hijos->isEmpty()) {
-                return response()->json([
-                    'viajes' => [],
-                    'message' => 'No tienes hijos registrados'
-                ], 200);
+                Log::info("viajesDisponibles - Usuario {$user->id} no tiene hijos registrados");
+                return response()->json([], 200);
             }
             
             // Obtener viajes que pueden estar abiertos a confirmaciones.
@@ -461,9 +463,19 @@ class ViajeController extends Controller
             // viajes 'programado' cuya ventana de confirmaciones incluye el momento actual.
             $now = Carbon::now();
 
+            // Obtener escuelas de los hijos del usuario
+            $escuelasIds = $hijos->pluck('escuela_id')->filter()->unique()->values();
+            Log::info("viajesDisponibles - Escuelas de los hijos: " . json_encode($escuelasIds));
+            
+            // Buscar viajes de esas escuelas
             $candidates = Viaje::with(['escuela', 'unidad', 'chofer'])
                 ->whereIn('estado', ['programado', 'en_confirmaciones'])
+                ->when($escuelasIds->isNotEmpty(), function($query) use ($escuelasIds) {
+                    return $query->whereIn('escuela_id', $escuelasIds);
+                })
                 ->get();
+
+            Log::info("viajesDisponibles - Candidatos encontrados: " . $candidates->count());
 
             // Log para depuración: volcar campos clave de los candidatos
             try {
@@ -472,6 +484,8 @@ class ViajeController extends Controller
                         'id' => $v->id,
                         'estado' => $v->estado,
                         'tipo_viaje' => $v->tipo_viaje,
+                        'escuela_id' => $v->escuela_id,
+                        'escuela_nombre' => $v->escuela?->nombre,
                         'fecha_viaje' => $v->fecha_viaje?->format('Y-m-d'),
                         'fecha_inicio_recurrencia' => $v->fecha_inicio_recurrencia?->format('Y-m-d'),
                         'fecha_fin_recurrencia' => $v->fecha_fin_recurrencia?->format('Y-m-d'),
@@ -483,7 +497,7 @@ class ViajeController extends Controller
                     ];
                 })->toArray();
 
-                Log::info('viajesDisponibles - candidatos: ' . json_encode($debugArr));
+                Log::info('viajesDisponibles - Candidatos detalle: ' . json_encode($debugArr));
             } catch (\Exception $logEx) {
                 Log::warning('viajesDisponibles - error al generar debugArr: ' . $logEx->getMessage());
             }
@@ -552,6 +566,8 @@ class ViajeController extends Controller
                 return false;
             });
 
+            Log::info("viajesDisponibles - Viajes disponibles después del filtro: " . $disponibles->count());
+            
             // Agregar confirmaciones del usuario para cada viaje disponible
             $disponibles->each(function($viaje) use ($user) {
                 try {
@@ -566,7 +582,10 @@ class ViajeController extends Controller
                 }
             });
 
-            return response()->json($disponibles->values(), 200);
+            $resultado = $disponibles->values();
+            Log::info("viajesDisponibles - Retornando " . $resultado->count() . " viajes");
+            
+            return response()->json($resultado, 200);
             
         } catch (\Exception $e) {
             Log::error('Error al obtener viajes disponibles: ' . $e->getMessage());
