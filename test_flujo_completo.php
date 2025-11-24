@@ -70,7 +70,7 @@ try {
     }
     
     // 4. Verificar confirmaciones
-    $confirmaciones = DB::table('confirmaciones_viajes')
+    $confirmaciones = DB::table('confirmaciones_viaje')
         ->where('viaje_id', $viaje->id)
         ->where('estado', 'confirmado')
         ->get();
