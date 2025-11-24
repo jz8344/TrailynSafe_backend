@@ -31,4 +31,10 @@ class Usuario extends Authenticatable
     {
         return $this->contrasena;
     }
+
+    // Relaciones
+    public function hijos()
+    {
+        return $this->hasMany(Hijo::class, 'padre_id');
+    }
 }

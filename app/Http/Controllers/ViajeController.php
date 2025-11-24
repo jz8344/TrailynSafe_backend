@@ -437,10 +437,18 @@ class ViajeController extends Controller
     {
         try {
             $user = auth()->user();
-            
-            // Obtener hijos del usuario
-            $hijos = $user->hijos;
-            
+
+            // Si por alguna razón no hay usuario autenticado, responder 401
+            if (!$user) {
+                Log::warning('viajesDisponibles: usuario no autenticado al intentar obtener viajes disponibles');
+                return response()->json([
+                    'error' => 'No autenticado'
+                ], 401);
+            }
+
+            // Obtener hijos del usuario (si no tiene hijos, devolvemos vacío)
+            $hijos = $user->hijos ?? collect([]);
+
             if ($hijos->isEmpty()) {
                 return response()->json([
                     'viajes' => [],
@@ -458,11 +466,17 @@ class ViajeController extends Controller
             
             // Verificar qué hijos ya tienen confirmación en cada viaje
             $viajes->each(function($viaje) use ($user) {
-                $viaje->confirmaciones_usuario = ConfirmacionViaje::where('viaje_id', $viaje->id)
-                    ->where('padre_id', $user->id)
-                    ->where('estado', 'confirmado')
-                    ->with('hijo')
-                    ->get();
+                try {
+                    $viaje->confirmaciones_usuario = ConfirmacionViaje::where('viaje_id', $viaje->id)
+                        ->where('padre_id', $user->id)
+                        ->where('estado', 'confirmado')
+                        ->with('hijo')
+                        ->get();
+                } catch (\Exception $ex) {
+                    // Registrar el error y continuar
+                    Log::error("Error al obtener confirmaciones para viaje {$viaje->id}: {$ex->getMessage()}");
+                    $viaje->confirmaciones_usuario = collect([]);
+                }
             });
             
             return response()->json($viajes, 200);
