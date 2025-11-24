@@ -169,6 +169,12 @@ Route::middleware(['auth:chofer-sanctum'])->prefix('chofer')->group(function () 
     Route::post('/rutas/{ruta_id}/completar', [RutaController::class, 'completarRuta']);
     Route::post('/paradas/{parada_id}/llegar', [RutaController::class, 'llegarAParada']);
     
+    // Gestión de viajes
+    Route::get('/viajes', [ViajeController::class, 'viajesChofer']);
+    Route::post('/viajes/{viaje_id}/abrir-confirmaciones', [ViajeController::class, 'abrirConfirmacionesChofer']);
+    Route::post('/viajes/{viaje_id}/programar', [ViajeController::class, 'programarChofer']);
+    Route::post('/viajes/{viaje_id}/cancelar', [ViajeController::class, 'cancelarChofer']);
+    
     // Asistencias
     Route::post('/asistencias', [AsistenciaController::class, 'registrar']);
     Route::post('/asistencias/ausente', [AsistenciaController::class, 'marcarAusente']);

@@ -595,4 +595,197 @@ class ViajeController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Obtener viajes asignados al chofer (Chofer)
+     */
+    public function viajesChofer(Request $request)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            Log::info("viajesChofer - Chofer ID: {$chofer->id}, Nombre: {$chofer->nombre}");
+
+            // Obtener viajes asignados a este chofer
+            $viajes = Viaje::with(['escuela', 'unidad', 'ruta'])
+                ->where('chofer_id', $chofer->id)
+                ->orderByDesc('fecha_viaje')
+                ->get();
+
+            Log::info("viajesChofer - Viajes encontrados: " . $viajes->count());
+
+            return response()->json($viajes, 200);
+        } catch (\Exception $e) {
+            Log::error('Error al obtener viajes del chofer: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al obtener viajes',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Abrir confirmaciones de un viaje (Chofer)
+     */
+    public function abrirConfirmacionesChofer(Request $request, $viaje_id)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            $viaje = Viaje::with(['escuela', 'unidad'])->findOrFail($viaje_id);
+
+            // Verificar que el viaje pertenece al chofer
+            if ($viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permiso para modificar este viaje'
+                ], 403);
+            }
+
+            // Solo se puede abrir confirmaciones desde estado 'programado'
+            if ($viaje->estado !== 'programado') {
+                return response()->json([
+                    'error' => 'El viaje debe estar en estado programado para abrir confirmaciones',
+                    'estado_actual' => $viaje->estado
+                ], 400);
+            }
+
+            // Verificar que tenga horarios de confirmación configurados
+            if (!$viaje->hora_inicio_confirmaciones || !$viaje->hora_fin_confirmaciones) {
+                return response()->json([
+                    'error' => 'El viaje no tiene configurados los horarios de confirmación'
+                ], 400);
+            }
+
+            $viaje->abrirConfirmaciones();
+
+            Log::info("Chofer {$chofer->id} abrió confirmaciones del viaje {$viaje_id}");
+
+            return response()->json([
+                'message' => 'Confirmaciones abiertas exitosamente',
+                'viaje' => $viaje->load(['escuela', 'unidad', 'ruta'])
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Viaje no encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al abrir confirmaciones: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al abrir confirmaciones',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Programar un viaje (Chofer)
+     */
+    public function programarChofer(Request $request, $viaje_id)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            $viaje = Viaje::with(['escuela', 'unidad'])->findOrFail($viaje_id);
+
+            // Verificar que el viaje pertenece al chofer
+            if ($viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permiso para modificar este viaje'
+                ], 403);
+            }
+
+            // Solo se puede programar desde estado 'pendiente'
+            if ($viaje->estado !== 'pendiente') {
+                return response()->json([
+                    'error' => 'El viaje debe estar en estado pendiente para ser programado',
+                    'estado_actual' => $viaje->estado
+                ], 400);
+            }
+
+            $viaje->programar();
+
+            Log::info("Chofer {$chofer->id} programó el viaje {$viaje_id}");
+
+            return response()->json([
+                'message' => 'Viaje programado exitosamente',
+                'viaje' => $viaje->load(['escuela', 'unidad', 'ruta'])
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Viaje no encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al programar viaje: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al programar viaje',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancelar un viaje (Chofer)
+     */
+    public function cancelarChofer(Request $request, $viaje_id)
+    {
+        try {
+            $chofer = auth('chofer-sanctum')->user();
+
+            if (!$chofer) {
+                return response()->json(['error' => 'No autenticado'], 401);
+            }
+
+            $validator = Validator::make($request->all(), [
+                'motivo' => 'required|string|max:500'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Datos inválidos',
+                    'messages' => $validator->errors()
+                ], 422);
+            }
+
+            $viaje = Viaje::with(['escuela', 'unidad'])->findOrFail($viaje_id);
+
+            // Verificar que el viaje pertenece al chofer
+            if ($viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permiso para modificar este viaje'
+                ], 403);
+            }
+
+            // No se puede cancelar un viaje ya finalizado
+            if (in_array($viaje->estado, ['finalizado', 'cancelado'])) {
+                return response()->json([
+                    'error' => 'No se puede cancelar un viaje finalizado o ya cancelado'
+                ], 400);
+            }
+
+            $viaje->cancelar($request->motivo);
+
+            Log::info("Chofer {$chofer->id} canceló el viaje {$viaje_id}");
+
+            return response()->json([
+                'message' => 'Viaje cancelado exitosamente',
+                'viaje' => $viaje->load(['escuela', 'unidad', 'ruta'])
+            ], 200);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['error' => 'Viaje no encontrado'], 404);
+        } catch (\Exception $e) {
+            Log::error('Error al cancelar viaje: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Error al cancelar viaje',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
