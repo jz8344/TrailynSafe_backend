@@ -34,6 +34,9 @@ Route::post('/auth/google', [GoogleAuthController::class, 'loginWithGoogle']);
 Route::post('/admin/register', [AdminController::class, 'register']);
 Route::post('/admin/login', [AdminController::class, 'login']);
 
+// Rutas públicas para choferes
+Route::post('/chofer/login', [App\Http\Controllers\ChoferAuthController::class, 'login']);
+
 // Rutas protegidas para usuarios regulares
 Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class])->group(function () {
     Route::get('/sesion', [SessionController::class, 'index']);
@@ -150,17 +153,24 @@ Route::middleware(['auth:admin-sanctum'])->group(function () {
 // Rutas públicas para webhook (sin autenticación, pero con validación de token en el controller si es necesario)
 Route::post('/webhook/ruta-generada', [RutaController::class, 'recibirRutaGenerada']);
 
-// Rutas para choferes (asumiendo que usan el mismo guard que usuarios)
-Route::middleware(['auth:sanctum', \App\Http\Middleware\CheckRoleUsuario::class])->group(function () {
-    // Rutas para choferes
-    Route::get('/chofer/rutas', [RutaController::class, 'rutasChofer']);
-    Route::put('/chofer/rutas/{ruta_id}/iniciar', [RutaController::class, 'iniciarRuta']);
-    Route::put('/chofer/rutas/{ruta_id}/completar', [RutaController::class, 'completarRuta']);
-    Route::put('/chofer/paradas/{parada_id}/llegar', [RutaController::class, 'llegarAParada']);
+// Rutas protegidas para choferes
+Route::middleware(['auth:sanctum'])->prefix('chofer')->group(function () {
+    // Autenticación
+    Route::post('/logout', [App\Http\Controllers\ChoferAuthController::class, 'logout']);
+    Route::get('/profile', [App\Http\Controllers\ChoferAuthController::class, 'profile']);
+    Route::put('/profile', [App\Http\Controllers\ChoferAuthController::class, 'updateProfile']);
+    Route::post('/change-password', [App\Http\Controllers\ChoferAuthController::class, 'changePassword']);
     
-    // Asistencias - Chofer
-    Route::post('/chofer/asistencias', [AsistenciaController::class, 'registrar']);
-    Route::post('/chofer/asistencias/ausente', [AsistenciaController::class, 'marcarAusente']);
+    // Rutas asignadas
+    Route::get('/rutas', [RutaController::class, 'rutasChofer']);
+    Route::get('/rutas/{id}', [RutaController::class, 'show']);
+    Route::post('/rutas/{ruta_id}/iniciar', [RutaController::class, 'iniciarRuta']);
+    Route::post('/rutas/{ruta_id}/completar', [RutaController::class, 'completarRuta']);
+    Route::post('/paradas/{parada_id}/llegar', [RutaController::class, 'llegarAParada']);
+    
+    // Asistencias
+    Route::post('/asistencias', [AsistenciaController::class, 'registrar']);
+    Route::post('/asistencias/ausente', [AsistenciaController::class, 'marcarAusente']);
 });
 
 
