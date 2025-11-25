@@ -1038,28 +1038,42 @@ class ViajeController extends Controller
                     'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1
                 ]);
 
+                // Calcular hora de inicio (viaje empieza antes de la hora programada)
+                $horaInicio = Carbon::parse($viaje->hora_salida_programada)
+                    ->subMinutes($rutaOptimizada['tiempo_total_min']);
+                
                 // Crear paradas de ruta
                 foreach ($rutaOptimizada['paradas_ordenadas'] as $index => $parada) {
-                    ParadaRuta::create([
+                    // Calcular hora estimada de llegada a esta parada
+                    $horaEstimada = $horaInicio->copy()->addMinutes(
+                        array_sum(array_slice(
+                            array_column($rutaOptimizada['paradas_ordenadas'], 'tiempo_desde_anterior_min'),
+                            0,
+                            $parada['orden']
+                        ))
+                    );
+                    
+                    $paradaCreada = ParadaRuta::create([
                         'ruta_id' => $ruta->id,
                         'orden' => $parada['orden'],
                         'confirmacion_id' => $parada['confirmacion_id'],
                         'direccion' => $parada['direccion'],
                         'latitud' => $parada['latitud'],
                         'longitud' => $parada['longitud'],
-                        'hora_estimada' => now()->format('H:i:s'),
+                        'hora_estimada' => $horaEstimada->format('H:i:s'),
                         'distancia_desde_anterior_km' => $parada['distancia_desde_anterior_km'] ?? 0,
                         'tiempo_desde_anterior_min' => $parada['tiempo_desde_anterior_min'] ?? 0,
                         'cluster_asignado' => $parada['cluster_asignado'] ?? null,
                         'estado' => 'pendiente'
                     ]);
 
-                    // Actualizar confirmación con orden
-                    if (isset($parada['confirmacion_id'])) {
-                        ConfirmacionViaje::where('id', $parada['confirmacion_id'])->update([
-                            'orden_recogida' => $parada['orden']
+                    // Actualizar confirmación con parada_id y orden
+                    ConfirmacionViaje::where('id', $parada['confirmacion_id'])
+                        ->update([
+                            'parada_id' => $paradaCreada->id,
+                            'orden' => $parada['orden'],
+                            'hora_estimada_llegada' => $horaEstimada->format('H:i:s')
                         ]);
-                    }
                 }
 
                 // Vincular ruta al viaje y cambiar estado a 'en_curso'
