@@ -74,11 +74,11 @@ class EscuelaController extends Controller
             if (isset($data['direccion'])) {
                 try {
                     $geocodingService = new GeocodingService();
-                    $coordenadas = $geocodingService->geocodificarDireccion($data['direccion']);
+                    $coordenadas = $geocodingService->geocodificar($data['direccion']);
                     
                     if ($coordenadas) {
-                        $data['latitud'] = $coordenadas['lat'];
-                        $data['longitud'] = $coordenadas['lng'];
+                        $data['latitud'] = $coordenadas['latitud'];
+                        $data['longitud'] = $coordenadas['longitud'];
                         
                         Log::info("Nueva escuela geocodificada automáticamente", [
                             'direccion' => $data['direccion'],
@@ -168,11 +168,11 @@ class EscuelaController extends Controller
             if (isset($data['direccion'])) {
                 try {
                     $geocodingService = new GeocodingService();
-                    $coordenadas = $geocodingService->geocodificarDireccion($data['direccion']);
+                    $coordenadas = $geocodingService->geocodificar($data['direccion']);
                     
                     if ($coordenadas) {
-                        $data['latitud'] = $coordenadas['lat'];
-                        $data['longitud'] = $coordenadas['lng'];
+                        $data['latitud'] = $coordenadas['latitud'];
+                        $data['longitud'] = $coordenadas['longitud'];
                         
                         Log::info("Escuela geocodificada automáticamente", [
                             'escuela_id' => $id,
