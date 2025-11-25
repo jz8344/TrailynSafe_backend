@@ -1010,8 +1010,13 @@ class ViajeController extends Controller
                 // Preparar datos para optimización
                 $confirmaciones = $viaje->confirmaciones()->where('estado', 'confirmado')->get();
                 
+                Log::info("Confirmaciones encontradas", [
+                    'count' => $confirmaciones->count(),
+                    'confirmaciones_raw' => $confirmaciones->toArray()
+                ]);
+                
                 $confirmacionesData = $confirmaciones->map(function($conf) {
-                    return [
+                    $data = [
                         'id' => $conf->id,
                         'hijo_id' => $conf->hijo_id,
                         'hijo_nombre' => $conf->hijo->nombre ?? 'Sin nombre',
@@ -1020,6 +1025,13 @@ class ViajeController extends Controller
                         'latitud' => floatval($conf->latitud),
                         'longitud' => floatval($conf->longitud),
                     ];
+                    
+                    Log::info("Confirmacion procesada", [
+                        'conf_id' => $conf->id,
+                        'data' => $data
+                    ]);
+                    
+                    return $data;
                 })->toArray();
 
                 $escuelaCoordenadas = [
