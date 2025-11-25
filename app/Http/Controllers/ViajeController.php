@@ -919,7 +919,7 @@ class ViajeController extends Controller
      */
     private function solicitarGeneracionRuta($viaje)
     {
-        $djangoUrl = env('DJANGO_API_URL', 'https://django-production-8d43.up.railway.app');
+        $djangoUrl = env('DJANGO_API_URL', 'https://kmeans-flask-production.up.railway.app');
         
         // Preparar datos para Django
         $confirmaciones = $viaje->confirmaciones()->where('estado', 'confirmado')->get();
