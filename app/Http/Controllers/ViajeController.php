@@ -1016,12 +1016,17 @@ class ViajeController extends Controller
                 ]);
                 
                 $confirmacionesData = $confirmaciones->map(function($conf) {
+                    // Validar que tenga coordenadas
+                    if (!$conf->latitud || !$conf->longitud) {
+                        throw new \Exception("Confirmación ID {$conf->id} no tiene coordenadas válidas. Latitud: {$conf->latitud}, Longitud: {$conf->longitud}");
+                    }
+                    
                     $data = [
                         'id' => $conf->id,
                         'hijo_id' => $conf->hijo_id,
-                        'hijo_nombre' => $conf->hijo->nombre ?? 'Sin nombre',
-                        'direccion_recogida' => $conf->direccion_recogida,
-                        'referencia' => $conf->referencia,
+                        'hijo_nombre' => optional($conf->hijo)->nombre ?? 'Sin nombre',
+                        'direccion_recogida' => $conf->direccion_recogida ?? '',
+                        'referencia' => $conf->referencia ?? '',
                         'latitud' => floatval($conf->latitud),
                         'longitud' => floatval($conf->longitud),
                     ];
