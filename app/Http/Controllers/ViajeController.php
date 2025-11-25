@@ -988,6 +988,23 @@ class ViajeController extends Controller
 
             // Generar ruta con K-means en PHP
             try {
+                // Validar que la escuela tenga coordenadas
+                if (!$viaje->escuela->latitud || !$viaje->escuela->longitud) {
+                    Log::error("Escuela sin coordenadas", [
+                        'escuela_id' => $viaje->escuela_id,
+                        'escuela_nombre' => $viaje->escuela->nombre
+                    ]);
+                    
+                    // Revertir estado
+                    $viaje->estado = 'confirmado';
+                    $viaje->save();
+                    
+                    return response()->json([
+                        'error' => 'La escuela no tiene coordenadas geocodificadas',
+                        'message' => 'Por favor, actualiza la escuela con su ubicación GPS antes de generar rutas'
+                    ], 400);
+                }
+                
                 $rutaOptimizacionService = new \App\Services\RutaOptimizacionService();
                 
                 // Preparar datos para optimización
@@ -1006,8 +1023,8 @@ class ViajeController extends Controller
                 })->toArray();
 
                 $escuelaCoordenadas = [
-                    'lat' => floatval($viaje->escuela->latitud ?? 0),
-                    'lng' => floatval($viaje->escuela->longitud ?? 0),
+                    'lat' => floatval($viaje->escuela->latitud),
+                    'lng' => floatval($viaje->escuela->longitud),
                 ];
 
                 // Optimizar ruta con K-means
