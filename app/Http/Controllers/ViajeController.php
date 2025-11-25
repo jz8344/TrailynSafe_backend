@@ -1053,6 +1053,11 @@ class ViajeController extends Controller
                         ))
                     );
                     
+                    Log::info("Creando parada {$index}", [
+                        'parada_data' => $parada,
+                        'hora_estimada' => $horaEstimada->format('H:i:s')
+                    ]);
+                    
                     $paradaCreada = ParadaRuta::create([
                         'ruta_id' => $ruta->id,
                         'orden' => $parada['orden'],
