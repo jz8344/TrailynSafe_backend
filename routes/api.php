@@ -18,6 +18,7 @@ use App\Http\Controllers\ViajeController;
 use App\Http\Controllers\RutaController;
 use App\Http\Controllers\ConfirmacionController;
 use App\Http\Controllers\AsistenciaController;
+use App\Http\Controllers\TrackingController;
 
 // Rutas públicas para usuarios
 Route::post('/register', [UsuarioController::class, 'register']);
@@ -180,6 +181,21 @@ Route::middleware(['auth:chofer-sanctum'])->prefix('chofer')->group(function () 
     // Asistencias
     Route::post('/asistencias', [AsistenciaController::class, 'registrar']);
     Route::post('/asistencias/ausente', [AsistenciaController::class, 'marcarAusente']);
+    
+    // Tracking GPS
+    Route::post('/tracking/ubicacion', [TrackingController::class, 'actualizarUbicacion']);
+});
+
+// Rutas de tracking para padres (autenticados)
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::get('/tracking/ruta/{ruta_id}', [TrackingController::class, 'trackingRuta']);
+    Route::get('/tracking/chofer/{chofer_id}', [TrackingController::class, 'obtenerUbicacionChofer']);
+});
+
+// Rutas de tracking para admin
+Route::middleware(['auth:admin-sanctum'])->prefix('admin')->group(function () {
+    Route::get('/tracking/ruta/{ruta_id}/historial', [TrackingController::class, 'historialRuta']);
+    Route::post('/tracking/limpiar', [TrackingController::class, 'limpiarUbicacionesAntiguas']);
 });
 
 

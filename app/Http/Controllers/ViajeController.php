@@ -5,11 +5,14 @@ namespace App\Http\Controllers;
 use App\Models\Viaje;
 use App\Models\ConfirmacionViaje;
 use App\Models\Unidad;
+use App\Models\Ruta;
+use App\Models\ParadaRuta;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
+use App\Services\RutaOptimizacionService;
 
 class ViajeController extends Controller
 {
@@ -361,17 +364,25 @@ class ViajeController extends Controller
     }
 
     /**
-     * Iniciar generación de ruta
+     * Generar ruta optimizada con K-means (PHP nativo)
      */
     public function generarRuta($id)
     {
+        DB::beginTransaction();
+        
         try {
-            $viaje = Viaje::with(['confirmacionesActivas', 'escuela', 'unidad'])->findOrFail($id);
+            $viaje = Viaje::with(['confirmacionesActivas.hijo', 'escuela', 'unidad', 'chofer'])->findOrFail($id);
             
-            // Validar que el viaje esté confirmado
-            if ($viaje->estado !== 'confirmado') {
+            Log::info("Generando ruta para viaje ID: {$id}", [
+                'estado' => $viaje->estado,
+                'confirmaciones' => $viaje->confirmacionesActivas->count()
+            ]);
+            
+            // Validar que el viaje esté en confirmaciones
+            if ($viaje->estado !== 'en_confirmaciones') {
                 return response()->json([
-                    'error' => 'Solo se puede generar ruta para viajes confirmados'
+                    'error' => 'Solo se puede generar ruta para viajes en estado "en_confirmaciones"',
+                    'estado_actual' => $viaje->estado
                 ], 422);
             }
             
@@ -382,51 +393,143 @@ class ViajeController extends Controller
                 ], 422);
             }
             
-            // Cambiar estado
-            $viaje->iniciarGeneracionRuta();
+            // Validar que la escuela tenga coordenadas
+            if (empty($viaje->escuela->latitud) || empty($viaje->escuela->longitud)) {
+                return response()->json([
+                    'error' => 'La escuela no tiene coordenadas configuradas. Configure la ubicación en el módulo de escuelas.'
+                ], 422);
+            }
             
-            // Preparar datos para k-Means
-            $confirmaciones = $viaje->confirmacionesActivas;
+            // Preparar datos de confirmaciones para optimización
+            $confirmacionesData = $viaje->confirmacionesActivas->map(function($confirmacion) {
+                return [
+                    'id' => $confirmacion->id,
+                    'hijo_id' => $confirmacion->hijo_id,
+                    'hijo_nombre' => $confirmacion->hijo->nombre ?? 'Sin nombre',
+                    'direccion_recogida' => $confirmacion->direccion_recogida,
+                    'referencia' => $confirmacion->referencia,
+                    'latitud' => (float) $confirmacion->latitud,
+                    'longitud' => (float) $confirmacion->longitud
+                ];
+            })->toArray();
             
-            $datosKMeans = [
-                'viaje_id' => $viaje->id,
-                'capacidad_unidad' => $viaje->unidad->capacidad,
-                'destino' => [
-                    'nombre' => $viaje->escuela->nombre,
-                    'direccion' => $viaje->escuela->direccion,
-                    'latitud' => (float) ($viaje->escuela->latitud ?? 0),
-                    'longitud' => (float) ($viaje->escuela->longitud ?? 0)
-                ],
-                'puntos_recogida' => $confirmaciones->map(function($c) {
-                    return [
-                        'confirmacion_id' => $c->id,
-                        'hijo_id' => $c->hijo_id,
-                        'nombre' => $c->hijo->nombre ?? 'Sin nombre',
-                        'direccion' => $c->direccion_recogida,
-                        'referencia' => $c->referencia,
-                        'latitud' => (float) $c->latitud,
-                        'longitud' => (float) $c->longitud,
-                        'prioridad' => 'normal'
-                    ];
-                })->toArray(),
-                'hora_salida' => $viaje->hora_salida_programada->format('H:i:s')
+            $escuelaCoordenadas = [
+                'lat' => (float) $viaje->escuela->latitud,
+                'lng' => (float) $viaje->escuela->longitud
             ];
             
-            // TODO: Aquí se haría la llamada al servidor Django
-            // Por ahora retornamos los datos que se enviarían
+            // Usar servicio de optimización de rutas
+            $optimizacionService = new RutaOptimizacionService();
+            $resultado = $optimizacionService->optimizarRuta($escuelaCoordenadas, $confirmacionesData);
+            
+            if (!$resultado['success']) {
+                throw new \Exception($resultado['error'] ?? 'Error desconocido al optimizar ruta');
+            }
+            
+            // Crear registro de Ruta
+            $ruta = Ruta::create([
+                'viaje_id' => $viaje->id,
+                'escuela_id' => $viaje->escuela_id,
+                'chofer_id' => $viaje->chofer_id,
+                'latitud_inicio' => $escuelaCoordenadas['lat'],
+                'longitud_inicio' => $escuelaCoordenadas['lng'],
+                'latitud_fin' => $escuelaCoordenadas['lat'],
+                'longitud_fin' => $escuelaCoordenadas['lng'],
+                'distancia_total_km' => $resultado['distancia_total_km'],
+                'tiempo_estimado_min' => $resultado['tiempo_total_min'],
+                'polyline' => $resultado['polyline'],
+                'estado' => 'pendiente',
+                'fecha_generacion' => now(),
+                'algoritmo_usado' => 'K-means + Greedy TSP',
+                'num_clusters' => $resultado['num_clusters']
+            ]);
+            
+            Log::info("Ruta creada ID: {$ruta->id}");
+            
+            // Calcular hora de inicio (viaje empieza antes de la hora programada)
+            $horaInicio = Carbon::parse($viaje->hora_salida_programada)
+                ->subMinutes($resultado['tiempo_total_min']);
+            
+            // Crear ParadaRuta para cada parada optimizada
+            foreach ($resultado['paradas_ordenadas'] as $paradaData) {
+                // Calcular hora estimada de llegada a esta parada
+                $horaEstimada = $horaInicio->copy()->addMinutes(
+                    array_sum(array_slice(
+                        array_column($resultado['paradas_ordenadas'], 'tiempo_desde_anterior_min'),
+                        0,
+                        $paradaData['orden']
+                    ))
+                );
+                
+                $parada = ParadaRuta::create([
+                    'ruta_id' => $ruta->id,
+                    'confirmacion_id' => $paradaData['confirmacion_id'],
+                    'orden' => $paradaData['orden'],
+                    'direccion' => $paradaData['direccion'],
+                    'latitud' => $paradaData['latitud'],
+                    'longitud' => $paradaData['longitud'],
+                    'hora_estimada' => $horaEstimada->format('H:i:s'),
+                    'distancia_desde_anterior_km' => $paradaData['distancia_desde_anterior_km'],
+                    'tiempo_desde_anterior_min' => $paradaData['tiempo_desde_anterior_min'],
+                    'cluster_asignado' => $paradaData['cluster_asignado'],
+                    'estado' => 'pendiente'
+                ]);
+                
+                // Actualizar confirmación con parada_id y orden
+                ConfirmacionViaje::where('id', $paradaData['confirmacion_id'])
+                    ->update([
+                        'parada_id' => $parada->id,
+                        'orden' => $paradaData['orden'],
+                        'hora_estimada_llegada' => $horaEstimada->format('H:i:s')
+                    ]);
+            }
+            
+            // Cambiar estado del viaje a "confirmado" (ruta generada exitosamente)
+            $viaje->update([
+                'estado' => 'confirmado',
+                'hora_inicio_real' => $horaInicio->format('H:i:s')
+            ]);
+            
+            DB::commit();
+            
+            Log::info("Ruta generada exitosamente para viaje {$viaje->id}", [
+                'ruta_id' => $ruta->id,
+                'paradas' => count($resultado['paradas_ordenadas']),
+                'distancia_km' => $resultado['distancia_total_km'],
+                'tiempo_min' => $resultado['tiempo_total_min']
+            ]);
+            
+            // Cargar relaciones para respuesta
+            $ruta->load(['paradas' => function($query) {
+                $query->orderBy('orden')->with('confirmacion.hijo');
+            }]);
             
             return response()->json([
-                'message' => 'Generación de ruta iniciada',
-                'viaje' => $viaje,
-                'datos_kmeans' => $datosKMeans,
-                'nota' => 'Los datos están listos para enviar al servidor Django'
+                'success' => true,
+                'message' => '¡Ruta generada exitosamente con K-means!',
+                'viaje' => $viaje->fresh(['escuela', 'unidad', 'chofer']),
+                'ruta' => $ruta,
+                'resumen' => $resultado['resumen'],
+                'estadisticas' => [
+                    'total_paradas' => count($resultado['paradas_ordenadas']),
+                    'clusters_usados' => $resultado['num_clusters'],
+                    'distancia_total' => $resultado['distancia_total_km'] . ' km',
+                    'tiempo_estimado' => $resultado['tiempo_total_min'] . ' minutos',
+                    'hora_inicio_sugerida' => $horaInicio->format('H:i'),
+                    'hora_llegada_escuela' => $viaje->hora_salida_programada
+                ]
             ], 200);
             
         } catch (\Exception $e) {
-            Log::error('Error al generar ruta: ' . $e->getMessage());
+            DB::rollBack();
+            Log::error('Error generando ruta: ' . $e->getMessage(), [
+                'trace' => $e->getTraceAsString()
+            ]);
+            
             return response()->json([
-                'error' => $e->getMessage()
-            ], 422);
+                'success' => false,
+                'error' => 'Error al generar la ruta: ' . $e->getMessage()
+            ], 500);
         }
     }
 
@@ -883,25 +986,112 @@ class ViajeController extends Controller
 
             Log::info("Chofer {$chofer->id} confirmó viaje {$viaje_id}, iniciando generación de ruta");
 
-            // Llamar a Django para generar ruta con k-Means
+            // Generar ruta con K-means en PHP
             try {
-                $this->solicitarGeneracionRuta($viaje);
+                $rutaOptimizacionService = new \App\Services\RutaOptimizacionService();
+                
+                // Preparar datos para optimización
+                $confirmaciones = $viaje->confirmaciones()->where('estado', 'confirmado')->get();
+                
+                $puntos = $confirmaciones->map(function($conf) {
+                    return [
+                        'confirmacion_id' => $conf->id,
+                        'hijo_id' => $conf->hijo_id,
+                        'hijo_nombre' => $conf->hijo->nombre ?? 'Sin nombre',
+                        'latitud' => floatval($conf->latitud),
+                        'longitud' => floatval($conf->longitud),
+                        'direccion' => $conf->direccion_recogida,
+                        'referencia' => $conf->referencia,
+                    ];
+                })->toArray();
+
+                $destino = [
+                    'escuela_id' => $viaje->escuela_id,
+                    'nombre' => $viaje->escuela->nombre,
+                    'latitud' => floatval($viaje->escuela->latitud ?? 0),
+                    'longitud' => floatval($viaje->escuela->longitud ?? 0),
+                    'direccion' => $viaje->escuela->direccion,
+                ];
+
+                // Optimizar ruta con K-means
+                $rutaOptimizada = $rutaOptimizacionService->optimizarRuta(
+                    $puntos,
+                    $destino,
+                    $viaje->hora_salida_programada->format('H:i:s')
+                );
+
+                // Crear registro de Ruta
+                $ruta = Ruta::create([
+                    'nombre' => "Ruta {$viaje->nombre}",
+                    'descripcion' => "Ruta generada para viaje {$viaje->nombre}",
+                    'tipo' => 'escolar',
+                    'estado' => 'activa',
+                    'viaje_id' => $viaje->id,
+                    'escuela_id' => $viaje->escuela_id,
+                    'distancia_total_km' => $rutaOptimizada['distancia_total_km'] ?? 0,
+                    'duracion_total_minutos' => $rutaOptimizada['duracion_total_minutos'] ?? 0,
+                    'numero_paradas' => count($rutaOptimizada['paradas']),
+                    'polyline' => $rutaOptimizada['polyline'] ?? null,
+                    'algoritmo' => 'kmeans',
+                    'numero_clusters' => $rutaOptimizada['numero_clusters'] ?? 1,
+                    'admin_creador_id' => $viaje->admin_creador_id,
+                ]);
+
+                // Crear paradas de ruta
+                foreach ($rutaOptimizada['paradas'] as $index => $parada) {
+                    ParadaRuta::create([
+                        'ruta_id' => $ruta->id,
+                        'orden' => $parada['orden'],
+                        'confirmacion_id' => $parada['confirmacion_id'],
+                        'latitud' => $parada['latitud'],
+                        'longitud' => $parada['longitud'],
+                        'direccion' => $parada['direccion'],
+                        'referencia' => $parada['referencia'] ?? null,
+                        'cluster_id' => $parada['cluster_id'] ?? null,
+                        'hora_estimada_llegada' => $parada['hora_estimada'] ?? null,
+                        'distancia_desde_anterior_km' => $parada['distancia_desde_anterior_km'] ?? 0,
+                        'duracion_desde_anterior_minutos' => $parada['duracion_desde_anterior_minutos'] ?? 0,
+                    ]);
+
+                    // Actualizar confirmación con orden y hora estimada
+                    if ($parada['confirmacion_id']) {
+                        ConfirmacionViaje::where('id', $parada['confirmacion_id'])->update([
+                            'orden_recogida' => $parada['orden'],
+                            'hora_estimada_recogida' => $parada['hora_estimada'] ?? null,
+                        ]);
+                    }
+                }
+
+                // Vincular ruta al viaje y cambiar estado a 'en_curso'
+                $viaje->ruta_id = $ruta->id;
+                $viaje->estado = 'en_curso';
+                $viaje->save();
+
+                Log::info("Ruta generada exitosamente para viaje {$viaje->id}", [
+                    'ruta_id' => $ruta->id,
+                    'paradas' => count($rutaOptimizada['paradas']),
+                    'clusters' => $rutaOptimizada['numero_clusters'] ?? 1
+                ]);
+
+                return response()->json([
+                    'message' => 'Ruta generada exitosamente y viaje iniciado',
+                    'viaje' => $viaje->load(['escuela', 'unidad', 'ruta.paradas']),
+                    'ruta' => $ruta->load('paradas')
+                ], 200);
+
             } catch (\Exception $e) {
-                Log::error("Error al solicitar generación de ruta: " . $e->getMessage());
+                Log::error("Error al generar ruta: " . $e->getMessage());
+                Log::error($e->getTraceAsString());
+                
                 // Revertir estado
                 $viaje->estado = 'confirmado';
                 $viaje->save();
                 
                 return response()->json([
-                    'error' => 'Error al iniciar generación de ruta',
+                    'error' => 'Error al generar ruta',
                     'message' => $e->getMessage()
                 ], 500);
             }
-
-            return response()->json([
-                'message' => 'Generación de ruta iniciada exitosamente. Esto puede tardar unos minutos.',
-                'viaje' => $viaje->load(['escuela', 'unidad', 'ruta'])
-            ], 200);
 
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['error' => 'Viaje no encontrado'], 404);
@@ -915,8 +1105,10 @@ class ViajeController extends Controller
     }
 
     /**
-     * Solicitar generación de ruta a Django
+     * [DEPRECADO] Solicitar generación de ruta a Django/Flask
+     * Ya no se utiliza - reemplazado por RutaOptimizacionService (PHP K-means)
      */
+    /*
     private function solicitarGeneracionRuta($viaje)
     {
         $djangoUrl = env('DJANGO_API_URL', 'https://kmeans-flask-production.up.railway.app');
@@ -972,4 +1164,5 @@ class ViajeController extends Controller
         
         return $result;
     }
+    */
 }
