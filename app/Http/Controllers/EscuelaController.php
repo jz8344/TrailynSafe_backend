@@ -6,6 +6,7 @@ use App\Models\Escuela;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Log;
+use App\Services\GeocodingService;
 
 class EscuelaController extends Controller
 {
@@ -67,6 +68,27 @@ class EscuelaController extends Controller
             // Asegurar que el estado tenga un valor por defecto
             if (!isset($data['estado'])) {
                 $data['estado'] = 'activo';
+            }
+            
+            // Geocodificar automáticamente al crear
+            if (isset($data['direccion'])) {
+                try {
+                    $geocodingService = new GeocodingService();
+                    $coordenadas = $geocodingService->geocodificarDireccion($data['direccion']);
+                    
+                    if ($coordenadas) {
+                        $data['latitud'] = $coordenadas['lat'];
+                        $data['longitud'] = $coordenadas['lng'];
+                        
+                        Log::info("Nueva escuela geocodificada automáticamente", [
+                            'direccion' => $data['direccion'],
+                            'coordenadas' => $coordenadas
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("No se pudo geocodificar la nueva escuela: " . $e->getMessage());
+                    // No fallar si la geocodificación falla
+                }
             }
 
             $escuela = Escuela::create($data);
@@ -140,7 +162,31 @@ class EscuelaController extends Controller
                 ], 422);
             }
 
-            $escuela->update($request->all());
+            $data = $request->all();
+            
+            // Si se actualiza la dirección, geocodificar automáticamente
+            if (isset($data['direccion'])) {
+                try {
+                    $geocodingService = new GeocodingService();
+                    $coordenadas = $geocodingService->geocodificarDireccion($data['direccion']);
+                    
+                    if ($coordenadas) {
+                        $data['latitud'] = $coordenadas['lat'];
+                        $data['longitud'] = $coordenadas['lng'];
+                        
+                        Log::info("Escuela geocodificada automáticamente", [
+                            'escuela_id' => $id,
+                            'direccion' => $data['direccion'],
+                            'coordenadas' => $coordenadas
+                        ]);
+                    }
+                } catch (\Exception $e) {
+                    Log::warning("No se pudo geocodificar la escuela: " . $e->getMessage());
+                    // No fallar si la geocodificación falla, solo registrar
+                }
+            }
+            
+            $escuela->update($data);
 
             return response()->json($escuela, 200);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
