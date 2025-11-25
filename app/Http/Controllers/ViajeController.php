@@ -993,71 +993,71 @@ class ViajeController extends Controller
                 // Preparar datos para optimización
                 $confirmaciones = $viaje->confirmaciones()->where('estado', 'confirmado')->get();
                 
-                $puntos = $confirmaciones->map(function($conf) {
+                $confirmacionesData = $confirmaciones->map(function($conf) {
                     return [
-                        'confirmacion_id' => $conf->id,
+                        'id' => $conf->id,
                         'hijo_id' => $conf->hijo_id,
                         'hijo_nombre' => $conf->hijo->nombre ?? 'Sin nombre',
+                        'direccion_recogida' => $conf->direccion_recogida,
+                        'referencia' => $conf->referencia,
                         'latitud' => floatval($conf->latitud),
                         'longitud' => floatval($conf->longitud),
-                        'direccion' => $conf->direccion_recogida,
-                        'referencia' => $conf->referencia,
                     ];
                 })->toArray();
 
-                $destino = [
-                    'escuela_id' => $viaje->escuela_id,
-                    'nombre' => $viaje->escuela->nombre,
-                    'latitud' => floatval($viaje->escuela->latitud ?? 0),
-                    'longitud' => floatval($viaje->escuela->longitud ?? 0),
-                    'direccion' => $viaje->escuela->direccion,
+                $escuelaCoordenadas = [
+                    'lat' => floatval($viaje->escuela->latitud ?? 0),
+                    'lng' => floatval($viaje->escuela->longitud ?? 0),
                 ];
 
                 // Optimizar ruta con K-means
                 $rutaOptimizada = $rutaOptimizacionService->optimizarRuta(
-                    $puntos,
-                    $destino,
-                    $viaje->hora_salida_programada->format('H:i:s')
+                    $escuelaCoordenadas,
+                    $confirmacionesData
                 );
+                
+                if (!$rutaOptimizada['success']) {
+                    throw new \Exception($rutaOptimizada['error'] ?? 'Error desconocido al optimizar ruta');
+                }
 
                 // Crear registro de Ruta
                 $ruta = Ruta::create([
-                    'nombre' => "Ruta {$viaje->nombre}",
-                    'descripcion' => "Ruta generada para viaje {$viaje->nombre}",
-                    'tipo' => 'escolar',
-                    'estado' => 'activa',
                     'viaje_id' => $viaje->id,
                     'escuela_id' => $viaje->escuela_id,
+                    'chofer_id' => $viaje->chofer_id,
+                    'latitud_inicio' => $escuelaCoordenadas['lat'],
+                    'longitud_inicio' => $escuelaCoordenadas['lng'],
+                    'latitud_fin' => $escuelaCoordenadas['lat'],
+                    'longitud_fin' => $escuelaCoordenadas['lng'],
                     'distancia_total_km' => $rutaOptimizada['distancia_total_km'] ?? 0,
-                    'duracion_total_minutos' => $rutaOptimizada['duracion_total_minutos'] ?? 0,
-                    'numero_paradas' => count($rutaOptimizada['paradas']),
+                    'tiempo_estimado_min' => $rutaOptimizada['tiempo_total_min'] ?? 0,
                     'polyline' => $rutaOptimizada['polyline'] ?? null,
-                    'algoritmo' => 'kmeans',
-                    'numero_clusters' => $rutaOptimizada['numero_clusters'] ?? 1,
-                    'admin_creador_id' => $viaje->admin_creador_id,
+                    'estado' => 'pendiente',
+                    'fecha_generacion' => now(),
+                    'algoritmo_usado' => 'K-means + Greedy TSP',
+                    'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1
                 ]);
 
                 // Crear paradas de ruta
-                foreach ($rutaOptimizada['paradas'] as $index => $parada) {
+                foreach ($rutaOptimizada['paradas_ordenadas'] as $index => $parada) {
                     ParadaRuta::create([
                         'ruta_id' => $ruta->id,
                         'orden' => $parada['orden'],
                         'confirmacion_id' => $parada['confirmacion_id'],
+                        'direccion' => $parada['direccion'],
                         'latitud' => $parada['latitud'],
                         'longitud' => $parada['longitud'],
-                        'direccion' => $parada['direccion'],
-                        'referencia' => $parada['referencia'] ?? null,
-                        'cluster_id' => $parada['cluster_id'] ?? null,
-                        'hora_estimada_llegada' => $parada['hora_estimada'] ?? null,
+                        'hora_estimada' => now()->format('H:i:s'),
                         'distancia_desde_anterior_km' => $parada['distancia_desde_anterior_km'] ?? 0,
-                        'duracion_desde_anterior_minutos' => $parada['duracion_desde_anterior_minutos'] ?? 0,
+                        'tiempo_desde_anterior_min' => $parada['tiempo_desde_anterior_min'] ?? 0,
+                        'cluster_asignado' => $parada['cluster_asignado'] ?? null,
+                        'estado' => 'pendiente'
                     ]);
 
-                    // Actualizar confirmación con orden y hora estimada
-                    if ($parada['confirmacion_id']) {
+                    // Actualizar confirmación con orden
+                    if (isset($parada['confirmacion_id'])) {
                         ConfirmacionViaje::where('id', $parada['confirmacion_id'])->update([
-                            'orden_recogida' => $parada['orden'],
-                            'hora_estimada_recogida' => $parada['hora_estimada'] ?? null,
+                            'orden_recogida' => $parada['orden']
                         ]);
                     }
                 }
@@ -1069,8 +1069,8 @@ class ViajeController extends Controller
 
                 Log::info("Ruta generada exitosamente para viaje {$viaje->id}", [
                     'ruta_id' => $ruta->id,
-                    'paradas' => count($rutaOptimizada['paradas']),
-                    'clusters' => $rutaOptimizada['numero_clusters'] ?? 1
+                    'paradas' => count($rutaOptimizada['paradas_ordenadas']),
+                    'clusters' => $rutaOptimizada['num_clusters'] ?? 1
                 ]);
 
                 return response()->json([
