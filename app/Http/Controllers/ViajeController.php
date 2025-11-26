@@ -1105,12 +1105,11 @@ class ViajeController extends Controller
                         'estado' => 'pendiente'
                     ]);
 
-                    // Actualizar confirmación con parada_id y orden
+                    // Actualizar confirmación con orden y hora estimada
                     ConfirmacionViaje::where('id', $parada['confirmacion_id'])
                         ->update([
-                            'parada_id' => $paradaCreada->id,
-                            'orden' => $parada['orden'],
-                            'hora_estimada_llegada' => $horaEstimada->format('H:i:s')
+                            'orden_recogida' => $parada['orden'],
+                            'hora_estimada_recogida' => $horaEstimada->format('H:i:s')
                         ]);
                 }
 
