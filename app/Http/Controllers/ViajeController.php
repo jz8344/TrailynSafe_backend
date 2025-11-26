@@ -716,7 +716,7 @@ class ViajeController extends Controller
             Log::info("viajesChofer - Chofer ID: {$chofer->id}, Nombre: {$chofer->nombre}");
 
             // Obtener viajes asignados a este chofer
-            $viajes = Viaje::with(['escuela', 'unidad', 'ruta'])
+            $viajes = Viaje::with(['escuela', 'unidad', 'ruta.paradas'])
                 ->where('chofer_id', $chofer->id)
                 ->orderByDesc('fecha_viaje')
                 ->get();
