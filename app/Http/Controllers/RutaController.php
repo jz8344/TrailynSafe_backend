@@ -510,6 +510,13 @@ class RutaController extends Controller
     public function completarParadaConQR(Request $request, $rutaId, $paradaId)
     {
         try {
+            // DEBUG: Log incoming request
+            Log::info('🔍 completarParadaConQR - Request recibido', [
+                'all' => $request->all(),
+                'json' => $request->json()->all(),
+                'content' => $request->getContent()
+            ]);
+            
             // Validar datos de entrada
             $validator = Validator::make($request->all(), [
                 'codigo_qr' => 'required|string',
