@@ -49,7 +49,7 @@ class RutaOptimizacionService
             // 2. Determinar número óptimo de clusters (grupos)
             $numClusters = $this->calcularNumeroOptimoClusters(count($confirmaciones));
             
-            Log::info("Usando {$numClusters} clusters para {$confirmaciones} confirmaciones");
+            Log::info("Usando {$numClusters} clusters para " . count($confirmaciones) . " confirmaciones");
             
             // 3. Aplicar K-means clustering
             $kmeans = new KMeans($numClusters);
