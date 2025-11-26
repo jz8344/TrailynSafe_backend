@@ -505,4 +505,101 @@ class RutaOptimizacionService
             'northeast' => ['lat' => $maxLat, 'lng' => $maxLng]
         ];
     }
+    
+    /**
+     * Regenera polyline desde posición GPS actual hacia paradas pendientes
+     * Se usa cuando el chofer inicia la ruta o completa una parada
+     * 
+     * @param array $gpsActual ['lat' => float, 'lng' => float]
+     * @param array $paradasPendientes Paradas que aún no se han completado
+     * @param array $escuela Coordenadas de la escuela (destino final)
+     * @return string Polyline codificado
+     */
+    public function regenerarPolylineDesdeGPS($gpsActual, $paradasPendientes, $escuela)
+    {
+        try {
+            Log::info('🔄 Regenerando polyline desde GPS actual', [
+                'gps' => $gpsActual,
+                'paradas_pendientes' => count($paradasPendientes),
+                'escuela' => $escuela
+            ]);
+            
+            if (empty($this->googleMapsApiKey)) {
+                Log::warning('⚠️ Google Maps API key no configurada');
+                return $this->generarPolylineSimpleDesdeGPS($gpsActual, $paradasPendientes, $escuela);
+            }
+            
+            // Construir waypoints (paradas pendientes)
+            $waypoints = [];
+            foreach ($paradasPendientes as $parada) {
+                $lat = is_string($parada['latitud']) ? $parada['latitud'] : (string)$parada['latitud'];
+                $lng = is_string($parada['longitud']) ? $parada['longitud'] : (string)$parada['longitud'];
+                $waypoints[] = $lat . ',' . $lng;
+            }
+            
+            // Llamar a Google Directions API
+            $url = 'https://maps.googleapis.com/maps/api/directions/json';
+            $params = [
+                'origin' => $gpsActual['lat'] . ',' . $gpsActual['lng'],
+                'destination' => $escuela['lat'] . ',' . $escuela['lng'],
+                'key' => $this->googleMapsApiKey
+            ];
+            
+            // Agregar waypoints si existen
+            if (!empty($waypoints)) {
+                $params['waypoints'] = implode('|', $waypoints);
+            }
+            
+            Log::info('📡 Llamando Google Directions API para regenerar polyline', [
+                'origin' => $params['origin'],
+                'destination' => $params['destination'],
+                'waypoints' => count($waypoints)
+            ]);
+            
+            $response = Http::timeout(10)->get($url, $params);
+            
+            if ($response->successful()) {
+                $data = $response->json();
+                
+                if (isset($data['routes'][0]['overview_polyline']['points'])) {
+                    $polyline = $data['routes'][0]['overview_polyline']['points'];
+                    Log::info('✅ Polyline regenerado exitosamente', [
+                        'length' => strlen($polyline),
+                        'preview' => substr($polyline, 0, 50)
+                    ]);
+                    return $polyline;
+                } else {
+                    Log::warning('⚠️ Google API no retornó polyline', [
+                        'status' => $data['status'] ?? 'UNKNOWN',
+                        'error_message' => $data['error_message'] ?? null
+                    ]);
+                }
+            }
+            
+            // Fallback: polyline simple
+            return $this->generarPolylineSimpleDesdeGPS($gpsActual, $paradasPendientes, $escuela);
+            
+        } catch (\Exception $e) {
+            Log::error('❌ Error regenerando polyline: ' . $e->getMessage());
+            return $this->generarPolylineSimpleDesdeGPS($gpsActual, $paradasPendientes, $escuela);
+        }
+    }
+    
+    /**
+     * Genera polyline simple desde GPS actual (fallback)
+     */
+    private function generarPolylineSimpleDesdeGPS($gpsActual, $paradasPendientes, $escuela)
+    {
+        $coordenadas = [[$gpsActual['lat'], $gpsActual['lng']]];
+        
+        foreach ($paradasPendientes as $parada) {
+            $lat = is_string($parada['latitud']) ? floatval($parada['latitud']) : $parada['latitud'];
+            $lng = is_string($parada['longitud']) ? floatval($parada['longitud']) : $parada['longitud'];
+            $coordenadas[] = [$lat, $lng];
+        }
+        
+        $coordenadas[] = [$escuela['lat'], $escuela['lng']];
+        
+        return $this->encodePolyline($coordenadas);
+    }
 }

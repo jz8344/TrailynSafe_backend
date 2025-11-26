@@ -222,12 +222,24 @@ class RutaController extends Controller
 
     /**
      * Iniciar ruta (Chofer)
-     * Nota: Las rutas ahora se auto-inician. Este endpoint es por compatibilidad.
+     * Regenera el polyline desde la ubicación GPS actual del chofer
      */
     public function iniciarRuta(Request $request, $rutaId)
     {
         try {
-            $ruta = Ruta::with('viaje')->findOrFail($rutaId);
+            $validator = Validator::make($request->all(), [
+                'latitud' => 'required|numeric|between:-90,90',
+                'longitud' => 'required|numeric|between:-180,180'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Se requiere la ubicación GPS actual',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+            
+            $ruta = Ruta::with(['viaje.escuela', 'paradas'])->findOrFail($rutaId);
             
             // Validar que el chofer tenga permisos
             $chofer = auth('chofer-sanctum')->user();
@@ -238,26 +250,57 @@ class RutaController extends Controller
                 ], 403);
             }
             
-            // Si ya está en progreso, retornar éxito (idempotencia)
-            if ($ruta->estado === 'en_progreso') {
-                return response()->json([
-                    'message' => 'Ruta ya iniciada',
-                    'ruta' => $ruta->load('paradas'),
-                    'ya_iniciada' => true
-                ], 200);
-            }
-            
+            // Si ya está en progreso, regenerar polyline de todas formas
             DB::beginTransaction();
             
             try {
-                $ruta->iniciar();
-                $ruta->viaje->iniciar();
+                if ($ruta->estado !== 'en_progreso') {
+                    $ruta->iniciar();
+                    $ruta->viaje->iniciar();
+                }
+                
+                // 🔄 REGENERAR POLYLINE desde GPS actual
+                $gpsActual = [
+                    'lat' => floatval($request->latitud),
+                    'lng' => floatval($request->longitud)
+                ];
+                
+                $escuela = [
+                    'lat' => floatval($ruta->viaje->escuela->latitud),
+                    'lng' => floatval($ruta->viaje->escuela->longitud)
+                ];
+                
+                // Obtener paradas pendientes (no completadas)
+                $paradasPendientes = $ruta->paradas()
+                    ->where('estado', '!=', 'completada')
+                    ->orderBy('orden')
+                    ->get()
+                    ->toArray();
+                
+                if (!empty($paradasPendientes)) {
+                    $optimizacionService = new \App\Services\RutaOptimizacionService();
+                    $nuevoPolyline = $optimizacionService->regenerarPolylineDesdeGPS(
+                        $gpsActual,
+                        $paradasPendientes,
+                        $escuela
+                    );
+                    
+                    $ruta->polyline = $nuevoPolyline;
+                    $ruta->save();
+                    
+                    Log::info('🗺️ Polyline regenerado al iniciar ruta', [
+                        'ruta_id' => $ruta->id,
+                        'polyline_length' => strlen($nuevoPolyline),
+                        'paradas_pendientes' => count($paradasPendientes)
+                    ]);
+                }
                 
                 DB::commit();
                 
                 return response()->json([
                     'message' => 'Ruta iniciada exitosamente',
-                    'ruta' => $ruta->load('paradas')
+                    'ruta' => $ruta->load('paradas'),
+                    'polyline_regenerado' => true
                 ], 200);
                 
             } catch (\Exception $e) {
@@ -382,12 +425,51 @@ class RutaController extends Controller
                     $siguienteParada->save();
                 }
                 
+                // 🔄 REGENERAR POLYLINE si hay GPS y paradas pendientes
+                if ($request->has('latitud') && $request->has('longitud')) {
+                    $gpsActual = [
+                        'lat' => floatval($request->latitud),
+                        'lng' => floatval($request->longitud)
+                    ];
+                    
+                    $escuela = [
+                        'lat' => floatval($parada->ruta->viaje->escuela->latitud),
+                        'lng' => floatval($parada->ruta->viaje->escuela->longitud)
+                    ];
+                    
+                    // Obtener paradas pendientes
+                    $paradasPendientes = $parada->ruta->paradas()
+                        ->where('estado', '!=', 'completada')
+                        ->orderBy('orden')
+                        ->get()
+                        ->toArray();
+                    
+                    if (!empty($paradasPendientes)) {
+                        $optimizacionService = new \App\Services\RutaOptimizacionService();
+                        $nuevoPolyline = $optimizacionService->regenerarPolylineDesdeGPS(
+                            $gpsActual,
+                            $paradasPendientes,
+                            $escuela
+                        );
+                        
+                        $parada->ruta->polyline = $nuevoPolyline;
+                        $parada->ruta->save();
+                        
+                        Log::info('🗺️ Polyline regenerado después de completar parada', [
+                            'ruta_id' => $parada->ruta_id,
+                            'parada_completada' => $parada->id,
+                            'paradas_restantes' => count($paradasPendientes)
+                        ]);
+                    }
+                }
+                
                 DB::commit();
                 
                 return response()->json([
                     'message' => 'Parada completada exitosamente',
                     'parada' => $parada,
-                    'siguiente_parada' => $siguienteParada
+                    'siguiente_parada' => $siguienteParada,
+                    'polyline_regenerado' => $request->has('latitud')
                 ], 200);
                 
             } catch (\Exception $e) {

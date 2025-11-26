@@ -1085,8 +1085,7 @@ class ViajeController extends Controller
                         'algoritmo_tsp' => 'Greedy TSP',
                         'total_paradas' => count($rutaOptimizada['paradas_ordenadas'] ?? [])
                     ],
-                    'fecha_generacion' => now(),
-                    'fecha_inicio' => now(), // Iniciar automáticamente
+                    'fecha_generacion' => now()
                 ]);
                 
                 Log::info('✅ Ruta guardada en BD', [

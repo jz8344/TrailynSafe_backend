@@ -22,9 +22,7 @@ class Ruta extends Model
         'algoritmo_utilizado',
         'polyline',
         'parametros_algoritmo',
-        'fecha_generacion',
-        'fecha_inicio',
-        'fecha_fin'
+        'fecha_generacion'
     ];
 
     protected $casts = [
