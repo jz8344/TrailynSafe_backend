@@ -240,6 +240,11 @@ class Viaje extends Model
 
     public function iniciar()
     {
+        // Permitir re-iniciar si ya está en curso (idempotencia)
+        if ($this->estado === 'en_curso') {
+            return;
+        }
+        
         if ($this->estado !== 'ruta_generada') {
             throw new \Exception('Solo se pueden iniciar viajes con ruta generada');
         }

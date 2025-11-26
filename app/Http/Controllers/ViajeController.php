@@ -1063,14 +1063,14 @@ class ViajeController extends Controller
                     $rutaExistente->delete();
                 }
 
-                // Crear registro de Ruta con estado 'activa' para poder iniciarla
+                // Crear registro de Ruta con estado 'en_progreso' (auto-iniciada)
                 $ruta = Ruta::create([
                     'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
                     'viaje_id' => $viaje->id,
                     'escuela_id' => $viaje->escuela_id,
                     'distancia_total_km' => $rutaOptimizada['distancia_total_km'] ?? 0,
                     'tiempo_estimado_minutos' => $rutaOptimizada['tiempo_total_min'] ?? 0,
-                    'estado' => 'activa',
+                    'estado' => 'en_progreso', // Auto-iniciada, lista para navegar
                     'algoritmo_utilizado' => 'k-means-clustering',
                     'parametros_algoritmo' => [
                         'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1,
@@ -1078,6 +1078,7 @@ class ViajeController extends Controller
                         'total_paradas' => count($rutaOptimizada['paradas_ordenadas'] ?? [])
                     ],
                     'fecha_generacion' => now(),
+                    'fecha_inicio' => now(), // Iniciar automáticamente
                 ]);
 
                 // Calcular hora de inicio (viaje empieza antes de la hora programada)
@@ -1127,16 +1128,18 @@ class ViajeController extends Controller
                 $viaje->estado = 'en_curso';
                 $viaje->save();
 
-                Log::info("Ruta generada exitosamente para viaje {$viaje->id}", [
+                Log::info("Ruta generada y auto-iniciada para viaje {$viaje->id}", [
                     'ruta_id' => $ruta->id,
+                    'estado_ruta' => 'en_progreso',
                     'paradas' => count($rutaOptimizada['paradas_ordenadas']),
                     'clusters' => $rutaOptimizada['num_clusters'] ?? 1
                 ]);
 
                 return response()->json([
-                    'message' => 'Ruta generada exitosamente y viaje iniciado',
+                    'message' => 'Ruta generada y lista para navegar',
                     'viaje' => $viaje->load(['escuela', 'unidad', 'ruta.paradas']),
-                    'ruta' => $ruta->load('paradas')
+                    'ruta' => $ruta->load('paradas'),
+                    'auto_iniciada' => true
                 ], 200);
 
             } catch (\Exception $e) {

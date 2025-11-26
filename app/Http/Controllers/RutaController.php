@@ -222,6 +222,7 @@ class RutaController extends Controller
 
     /**
      * Iniciar ruta (Chofer)
+     * Nota: Las rutas ahora se auto-inician. Este endpoint es por compatibilidad.
      */
     public function iniciarRuta(Request $request, $rutaId)
     {
@@ -235,6 +236,15 @@ class RutaController extends Controller
                 return response()->json([
                     'error' => 'No tienes permisos para iniciar esta ruta'
                 ], 403);
+            }
+            
+            // Si ya está en progreso, retornar éxito (idempotencia)
+            if ($ruta->estado === 'en_progreso') {
+                return response()->json([
+                    'message' => 'Ruta ya iniciada',
+                    'ruta' => $ruta->load('paradas'),
+                    'ya_iniciada' => true
+                ], 200);
             }
             
             DB::beginTransaction();
@@ -298,6 +308,7 @@ class RutaController extends Controller
 
     /**
      * Completar parada (Chofer)
+     * Sistema robusto con idempotencia y manejo de errores
      */
     public function completarParada(Request $request, $rutaId, $paradaId)
     {
@@ -320,6 +331,20 @@ class RutaController extends Controller
                 ], 422);
             }
             
+            // IDEMPOTENCIA: Si ya está completada, retornar éxito
+            if ($parada->estado === 'completada') {
+                $siguienteParada = ParadaRuta::where('ruta_id', $parada->ruta_id)
+                    ->where('orden', $parada->orden + 1)
+                    ->first();
+                
+                return response()->json([
+                    'message' => 'Parada ya completada',
+                    'parada' => $parada,
+                    'siguiente_parada' => $siguienteParada,
+                    'ya_completada' => true
+                ], 200);
+            }
+            
             DB::beginTransaction();
             
             try {
@@ -327,16 +352,24 @@ class RutaController extends Controller
                 $parada->estado = 'completada';
                 $parada->save();
                 
-                // Registrar asistencia del hijo
+                // Registrar asistencia del hijo (verificar que no exista ya)
                 if ($parada->confirmacion) {
-                    Asistencia::create([
+                    $asistenciaExistente = Asistencia::where([
                         'hijo_id' => $parada->confirmacion->hijo_id,
                         'viaje_id' => $parada->ruta->viaje_id,
-                        'parada_id' => $parada->id,
-                        'estado' => 'presente',
-                        'hora_registro' => now(),
-                        'metodo_registro' => 'chofer'
-                    ]);
+                        'parada_id' => $parada->id
+                    ])->first();
+                    
+                    if (!$asistenciaExistente) {
+                        Asistencia::create([
+                            'hijo_id' => $parada->confirmacion->hijo_id,
+                            'viaje_id' => $parada->ruta->viaje_id,
+                            'parada_id' => $parada->id,
+                            'estado' => 'presente',
+                            'hora_registro' => now(),
+                            'metodo_registro' => 'chofer'
+                        ]);
+                    }
                 }
                 
                 // Verificar si hay una siguiente parada y marcarla como "en_camino"
