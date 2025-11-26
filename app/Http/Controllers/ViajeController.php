@@ -1064,6 +1064,13 @@ class ViajeController extends Controller
                 }
 
                 // Crear registro de Ruta con estado 'en_progreso' (auto-iniciada)
+                Log::info('💾 Guardando ruta en BD', [
+                    'polyline_length' => strlen($rutaOptimizada['polyline'] ?? ''),
+                    'polyline_exists' => isset($rutaOptimizada['polyline']),
+                    'polyline_empty' => empty($rutaOptimizada['polyline']),
+                    'polyline_preview' => substr($rutaOptimizada['polyline'] ?? '', 0, 50)
+                ]);
+                
                 $ruta = Ruta::create([
                     'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
                     'viaje_id' => $viaje->id,
@@ -1072,6 +1079,7 @@ class ViajeController extends Controller
                     'tiempo_estimado_minutos' => $rutaOptimizada['tiempo_total_min'] ?? 0,
                     'estado' => 'en_progreso', // Auto-iniciada, lista para navegar
                     'algoritmo_utilizado' => 'k-means-clustering',
+                    'polyline' => $rutaOptimizada['polyline'] ?? '', // Polyline de Google Maps
                     'parametros_algoritmo' => [
                         'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1,
                         'algoritmo_tsp' => 'Greedy TSP',
@@ -1079,6 +1087,12 @@ class ViajeController extends Controller
                     ],
                     'fecha_generacion' => now(),
                     'fecha_inicio' => now(), // Iniciar automáticamente
+                ]);
+                
+                Log::info('✅ Ruta guardada en BD', [
+                    'ruta_id' => $ruta->id,
+                    'polyline_saved' => !empty($ruta->polyline),
+                    'polyline_length_saved' => strlen($ruta->polyline ?? '')
                 ]);
 
                 // Calcular hora de inicio (viaje empieza antes de la hora programada)

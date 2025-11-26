@@ -20,8 +20,11 @@ class Ruta extends Model
         'tiempo_estimado_minutos',
         'estado',
         'algoritmo_utilizado',
+        'polyline',
         'parametros_algoritmo',
         'fecha_generacion',
+        'fecha_inicio',
+        'fecha_fin'
     ];
 
     protected $casts = [

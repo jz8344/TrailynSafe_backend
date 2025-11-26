@@ -147,6 +147,13 @@ class RutaOptimizacionService
                 $paradasOrdenadas
             );
             
+            Log::info('🗺️ Polyline generada', [
+                'polyline_length' => strlen($polylineData['polyline'] ?? ''),
+                'polyline_preview' => substr($polylineData['polyline'] ?? '', 0, 50),
+                'tiene_polyline' => !empty($polylineData['polyline']),
+                'bounds' => $polylineData['bounds'] ?? null
+            ]);
+            
             Log::info('Ruta optimizada exitosamente', [
                 'total_paradas' => count($paradasOrdenadas),
                 'clusters' => $numClusters,
@@ -331,6 +338,12 @@ class RutaOptimizacionService
     private function generarPolylineGoogleMaps($escuela, $paradas)
     {
         try {
+            Log::info('🚀 Generando polyline con Google Maps API', [
+                'api_key_configured' => !empty($this->googleMapsApiKey),
+                'api_key_length' => strlen($this->googleMapsApiKey ?? ''),
+                'total_paradas' => count($paradas)
+            ]);
+            
             if (empty($this->googleMapsApiKey)) {
                 Log::warning('Google Maps API key no configurada, usando polyline simplificado');
                 return $this->generarPolylineSimple($escuela, $paradas);
@@ -349,25 +362,55 @@ class RutaOptimizacionService
             $destino = $paradas[count($paradas) - 1];
             
             // Llamar a Google Maps Directions API
-            $response = Http::get('https://maps.googleapis.com/maps/api/directions/json', [
+            $url = 'https://maps.googleapis.com/maps/api/directions/json';
+            $params = [
                 'origin' => $escuela['lat'] . ',' . $escuela['lng'],
                 'destination' => $destino['latitud'] . ',' . $destino['longitud'],
                 'waypoints' => 'optimize:true|' . implode('|', $waypoints),
                 'key' => $this->googleMapsApiKey
+            ];
+            
+            Log::info('📡 Llamando Google Directions API', [
+                'url' => $url,
+                'origin' => $params['origin'],
+                'destination' => $params['destination'],
+                'waypoints_count' => count($waypoints)
+            ]);
+            
+            $response = Http::get($url, $params);
+            
+            Log::info('📥 Respuesta de Google API', [
+                'status_code' => $response->status(),
+                'successful' => $response->successful(),
+                'has_body' => !empty($response->body())
             ]);
             
             if ($response->successful()) {
                 $data = $response->json();
                 
+                Log::info('📋 Datos de Google API', [
+                    'status' => $data['status'] ?? 'NO_STATUS',
+                    'has_routes' => isset($data['routes'][0]),
+                    'error_message' => $data['error_message'] ?? null
+                ]);
+                
                 if (isset($data['routes'][0]['overview_polyline']['points'])) {
+                    $polyline = $data['routes'][0]['overview_polyline']['points'];
+                    Log::info('✅ Polyline obtenida de Google Maps', [
+                        'length' => strlen($polyline),
+                        'preview' => substr($polyline, 0, 50)
+                    ]);
                     return [
-                        'polyline' => $data['routes'][0]['overview_polyline']['points'],
+                        'polyline' => $polyline,
                         'bounds' => $data['routes'][0]['bounds'] ?? null
                     ];
                 }
             }
             
-            Log::warning('No se pudo obtener polyline de Google Maps, usando simplificado');
+            Log::warning('⚠️ No se pudo obtener polyline de Google Maps, usando simplificado', [
+                'api_status' => $data['status'] ?? 'UNKNOWN',
+                'error_message' => $data['error_message'] ?? 'No error message'
+            ]);
             return $this->generarPolylineSimple($escuela, $paradas);
             
         } catch (\Exception $e) {
