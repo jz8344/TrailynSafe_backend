@@ -906,6 +906,20 @@ class ViajeController extends Controller
                 return response()->json(['error' => 'No autenticado'], 401);
             }
 
+            // Validar GPS del chofer
+            $validator = Validator::make($request->all(), [
+                'latitud_chofer' => 'required|numeric|between:-90,90',
+                'longitud_chofer' => 'required|numeric|between:-180,180'
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Se requiere la ubicación GPS del chofer',
+                    'message' => 'Por favor, habilita el GPS para cerrar confirmaciones',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
             $viaje = Viaje::with(['escuela', 'unidad', 'confirmaciones'])->findOrFail($viaje_id);
 
             // Verificar que el viaje pertenece al chofer
@@ -923,15 +937,25 @@ class ViajeController extends Controller
                 ], 400);
             }
 
+            // 📍 Guardar ubicación GPS del chofer en el viaje
+            $viaje->latitud_inicio_chofer = floatval($request->latitud_chofer);
+            $viaje->longitud_inicio_chofer = floatval($request->longitud_chofer);
+            
             $viaje->cerrarConfirmaciones();
             $viaje->load(['escuela', 'unidad', 'ruta', 'confirmaciones']);
 
-            Log::info("Chofer {$chofer->id} cerró confirmaciones del viaje {$viaje_id}");
+            Log::info("Chofer {$chofer->id} cerró confirmaciones del viaje {$viaje_id}", [
+                'gps_chofer' => [
+                    'lat' => $viaje->latitud_inicio_chofer,
+                    'lng' => $viaje->longitud_inicio_chofer
+                ]
+            ]);
 
             return response()->json([
                 'message' => 'Confirmaciones cerradas exitosamente',
                 'viaje' => $viaje,
-                'confirmaciones_total' => $viaje->confirmaciones_actuales
+                'confirmaciones_total' => $viaje->confirmaciones_actuales,
+                'gps_chofer_guardado' => true
             ], 200);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['error' => 'Viaje no encontrado'], 404);
@@ -1044,10 +1068,25 @@ class ViajeController extends Controller
                     'lng' => floatval($viaje->escuela->longitud),
                 ];
 
-                // Optimizar ruta con K-means
+                // 📍 Incluir ubicación GPS del chofer como punto de partida
+                $choferGPS = null;
+                if ($viaje->latitud_inicio_chofer && $viaje->longitud_inicio_chofer) {
+                    $choferGPS = [
+                        'lat' => floatval($viaje->latitud_inicio_chofer),
+                        'lng' => floatval($viaje->longitud_inicio_chofer)
+                    ];
+                    
+                    Log::info('🚗 Usando GPS del chofer como punto de partida', [
+                        'viaje_id' => $viaje->id,
+                        'gps_chofer' => $choferGPS
+                    ]);
+                }
+
+                // Optimizar ruta con K-means (incluye GPS del chofer si está disponible)
                 $rutaOptimizada = $rutaOptimizacionService->optimizarRuta(
                     $escuelaCoordenadas,
-                    $confirmacionesData
+                    $confirmacionesData,
+                    $choferGPS // Nuevo parámetro: GPS del chofer
                 );
                 
                 if (!$rutaOptimizada['success']) {

@@ -22,12 +22,14 @@ class RutaOptimizacionService
      * @param array $confirmaciones Array de confirmaciones con direcciones
      * @return array Ruta optimizada con paradas ordenadas
      */
-    public function optimizarRuta($escuelaCoordenadas, $confirmaciones)
+    public function optimizarRuta($escuelaCoordenadas, $confirmaciones, $choferGPS = null)
     {
         try {
             Log::info('Iniciando optimización de ruta', [
                 'escuela' => $escuelaCoordenadas,
-                'total_confirmaciones' => count($confirmaciones)
+                'total_confirmaciones' => count($confirmaciones),
+                'tiene_gps_chofer' => !is_null($choferGPS),
+                'gps_chofer' => $choferGPS
             ]);
             
             if (empty($confirmaciones)) {
@@ -79,17 +81,23 @@ class RutaOptimizacionService
                 $centroides[$clusterIndex] = $this->calcularCentroide($puntosEnCluster);
             }
             
-            // 6. Ordenar clusters por distancia desde la escuela (greedy)
+            // 6. Ordenar clusters por distancia (desde GPS del chofer si está disponible, sino desde escuela)
+            $puntoInicio = $choferGPS ?? $escuelaCoordenadas;
             $ordenClusters = $this->ordenarClustersPorDistancia(
-                $escuelaCoordenadas,
+                $puntoInicio,
                 $centroides
             );
+            
+            Log::info('📍 Punto de inicio para ordenar paradas', [
+                'usa_gps_chofer' => !is_null($choferGPS),
+                'punto_inicio' => $puntoInicio
+            ]);
             
             // 7. Ordenar paradas dentro de cada cluster (TSP simplificado)
             $paradasOrdenadas = [];
             $distanciaTotal = 0;
             $tiempoTotal = 0;
-            $ultimoPunto = $escuelaCoordenadas;
+            $ultimoPunto = $puntoInicio; // 🚗 Empezar desde GPS del chofer o escuela
             $orden = 0;
             
             foreach ($ordenClusters as $clusterIndex) {
@@ -142,9 +150,11 @@ class RutaOptimizacionService
             }
             
             // 8. Generar polyline usando Google Maps Directions API
+            // 🚗 Si hay GPS del chofer, generar desde ahí; sino desde la escuela
             $polylineData = $this->generarPolylineGoogleMaps(
-                $escuelaCoordenadas,
-                $paradasOrdenadas
+                $puntoInicio, // Usa GPS del chofer o escuela
+                $paradasOrdenadas,
+                $escuelaCoordenadas // Destino siempre es la escuela
             );
             
             Log::info('🗺️ Polyline generada', [
@@ -334,19 +344,23 @@ class RutaOptimizacionService
     
     /**
      * Genera polyline usando Google Maps Directions API
+     * @param array $origen Punto de inicio (GPS chofer o escuela) con ['lat', 'lng']
+     * @param array $paradas Array de paradas ordenadas
+     * @param array|null $escuela Destino final (escuela) con ['lat', 'lng']
      */
-    private function generarPolylineGoogleMaps($escuela, $paradas)
+    private function generarPolylineGoogleMaps($origen, $paradas, $escuela = null)
     {
         try {
             Log::info('🚀 Generando polyline con Google Maps API', [
                 'api_key_configured' => !empty($this->googleMapsApiKey),
                 'api_key_length' => strlen($this->googleMapsApiKey ?? ''),
-                'total_paradas' => count($paradas)
+                'total_paradas' => count($paradas),
+                'tiene_destino_escuela' => !is_null($escuela)
             ]);
             
             if (empty($this->googleMapsApiKey)) {
                 Log::warning('Google Maps API key no configurada, usando polyline simplificado');
-                return $this->generarPolylineSimple($escuela, $paradas);
+                return $this->generarPolylineSimple($origen, $paradas, $escuela);
             }
             
             // Construir waypoints (máximo 25 waypoints intermedios en Google Maps)
@@ -358,14 +372,19 @@ class RutaOptimizacionService
                 $waypoints[] = $parada['latitud'] . ',' . $parada['longitud'];
             }
             
-            // Destino: última parada o escuela si hay más de 25 paradas
-            $destino = $paradas[count($paradas) - 1];
+            // 🎯 Destino: escuela si se proporciona, sino última parada
+            if ($escuela) {
+                $destinoFinal = $escuela['lat'] . ',' . $escuela['lng'];
+            } else {
+                $ultimaParada = $paradas[count($paradas) - 1];
+                $destinoFinal = $ultimaParada['latitud'] . ',' . $ultimaParada['longitud'];
+            }
             
             // Llamar a Google Maps Directions API
             $url = 'https://maps.googleapis.com/maps/api/directions/json';
             $params = [
-                'origin' => $escuela['lat'] . ',' . $escuela['lng'],
-                'destination' => $destino['latitud'] . ',' . $destino['longitud'],
+                'origin' => $origen['lat'] . ',' . $origen['lng'], // 🚗 Puede ser GPS del chofer
+                'destination' => $destinoFinal, // 🏫 Escuela
                 'waypoints' => 'optimize:true|' . implode('|', $waypoints),
                 'key' => $this->googleMapsApiKey
             ];
@@ -411,24 +430,29 @@ class RutaOptimizacionService
                 'api_status' => $data['status'] ?? 'UNKNOWN',
                 'error_message' => $data['error_message'] ?? 'No error message'
             ]);
-            return $this->generarPolylineSimple($escuela, $paradas);
+            return $this->generarPolylineSimple($origen, $paradas, $escuela);
             
         } catch (\Exception $e) {
             Log::error('Error generando polyline: ' . $e->getMessage());
-            return $this->generarPolylineSimple($escuela, $paradas);
+            return $this->generarPolylineSimple($origen, $paradas, $escuela);
         }
     }
     
     /**
      * Genera polyline simple conectando puntos directamente
      */
-    private function generarPolylineSimple($escuela, $paradas)
+    private function generarPolylineSimple($origen, $paradas, $escuela = null)
     {
-        // Crear array de coordenadas
-        $coordenadas = [[$escuela['lat'], $escuela['lng']]];
+        // Crear array de coordenadas empezando desde el origen (GPS chofer o escuela)
+        $coordenadas = [[$origen['lat'], $origen['lng']]];
         
         foreach ($paradas as $parada) {
             $coordenadas[] = [$parada['latitud'], $parada['longitud']];
+        }
+        
+        // Agregar escuela como destino final si se proporciona
+        if ($escuela) {
+            $coordenadas[] = [$escuela['lat'], $escuela['lng']];
         }
         
         // Codificar en formato polyline de Google

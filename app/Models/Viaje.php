@@ -35,6 +35,8 @@ class Viaje extends Model
         'admin_creador_id',
         'fecha_cambio_estado',
         'motivo_cancelacion',
+        'latitud_inicio_chofer',
+        'longitud_inicio_chofer',
     ];
 
     protected $casts = [

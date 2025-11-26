@@ -265,6 +265,12 @@ class RutaController extends Controller
                     'lng' => floatval($request->longitud)
                 ];
                 
+                Log::info('📍 GPS recibido para iniciar ruta', [
+                    'ruta_id' => $ruta->id,
+                    'gps_lat' => $gpsActual['lat'],
+                    'gps_lng' => $gpsActual['lng']
+                ]);
+                
                 $escuela = [
                     'lat' => floatval($ruta->viaje->escuela->latitud),
                     'lng' => floatval($ruta->viaje->escuela->longitud)
@@ -277,6 +283,12 @@ class RutaController extends Controller
                     ->get()
                     ->toArray();
                 
+                Log::info('🛑 Paradas pendientes para regenerar polyline', [
+                    'ruta_id' => $ruta->id,
+                    'total_paradas' => count($paradasPendientes),
+                    'paradas' => $paradasPendientes
+                ]);
+                
                 if (!empty($paradasPendientes)) {
                     $optimizacionService = new \App\Services\RutaOptimizacionService();
                     $nuevoPolyline = $optimizacionService->regenerarPolylineDesdeGPS(
@@ -284,6 +296,12 @@ class RutaController extends Controller
                         $paradasPendientes,
                         $escuela
                     );
+                    
+                    Log::info('✅ Polyline regenerado desde GPS', [
+                        'ruta_id' => $ruta->id,
+                        'polyline_length' => strlen($nuevoPolyline),
+                        'polyline_preview' => substr($nuevoPolyline, 0, 100)
+                    ]);
                     
                     $ruta->polyline = $nuevoPolyline;
                     $ruta->save();
