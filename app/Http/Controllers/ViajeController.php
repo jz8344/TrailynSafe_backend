@@ -1063,14 +1063,14 @@ class ViajeController extends Controller
                     $rutaExistente->delete();
                 }
 
-                // Crear registro de Ruta
+                // Crear registro de Ruta con estado 'activa' para poder iniciarla
                 $ruta = Ruta::create([
                     'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
                     'viaje_id' => $viaje->id,
                     'escuela_id' => $viaje->escuela_id,
                     'distancia_total_km' => $rutaOptimizada['distancia_total_km'] ?? 0,
                     'tiempo_estimado_minutos' => $rutaOptimizada['tiempo_total_min'] ?? 0,
-                    'estado' => 'pendiente',
+                    'estado' => 'activa',
                     'algoritmo_utilizado' => 'k-means-clustering',
                     'parametros_algoritmo' => [
                         'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1,

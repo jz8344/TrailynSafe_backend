@@ -6,6 +6,7 @@ use App\Models\Ruta;
 use App\Models\Viaje;
 use App\Models\ParadaRuta;
 use App\Models\ConfirmacionViaje;
+use App\Models\Asistencia;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -289,6 +290,80 @@ class RutaController extends Controller
             ], 200);
             
         } catch (\Exception $e) {
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 422);
+        }
+    }
+
+    /**
+     * Completar parada (Chofer)
+     */
+    public function completarParada(Request $request, $rutaId, $paradaId)
+    {
+        try {
+            $parada = ParadaRuta::with(['ruta.viaje', 'confirmacion'])->findOrFail($paradaId);
+            
+            // Validar permisos
+            $chofer = auth('chofer-sanctum')->user();
+            
+            if (!$chofer || $parada->ruta->viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permisos para esta parada'
+                ], 403);
+            }
+            
+            // Validar que la parada pertenece a la ruta
+            if ($parada->ruta_id !== (int)$rutaId) {
+                return response()->json([
+                    'error' => 'La parada no pertenece a esta ruta'
+                ], 422);
+            }
+            
+            DB::beginTransaction();
+            
+            try {
+                // Marcar parada como completada
+                $parada->estado = 'completada';
+                $parada->save();
+                
+                // Registrar asistencia del hijo
+                if ($parada->confirmacion) {
+                    Asistencia::create([
+                        'hijo_id' => $parada->confirmacion->hijo_id,
+                        'viaje_id' => $parada->ruta->viaje_id,
+                        'parada_id' => $parada->id,
+                        'estado' => 'presente',
+                        'hora_registro' => now(),
+                        'metodo_registro' => 'chofer'
+                    ]);
+                }
+                
+                // Verificar si hay una siguiente parada y marcarla como "en_camino"
+                $siguienteParada = ParadaRuta::where('ruta_id', $parada->ruta_id)
+                    ->where('orden', $parada->orden + 1)
+                    ->first();
+                
+                if ($siguienteParada) {
+                    $siguienteParada->estado = 'en_camino';
+                    $siguienteParada->save();
+                }
+                
+                DB::commit();
+                
+                return response()->json([
+                    'message' => 'Parada completada exitosamente',
+                    'parada' => $parada,
+                    'siguiente_parada' => $siguienteParada
+                ], 200);
+                
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error al completar parada: ' . $e->getMessage());
             return response()->json([
                 'error' => $e->getMessage()
             ], 422);

@@ -167,6 +167,7 @@ Route::middleware(['auth:chofer-sanctum'])->prefix('chofer')->group(function () 
     Route::get('/rutas', [RutaController::class, 'rutasChofer']);
     Route::get('/rutas/{id}', [RutaController::class, 'show']);
     Route::post('/rutas/{ruta_id}/iniciar', [RutaController::class, 'iniciarRuta']);
+    Route::post('/rutas/{ruta_id}/paradas/{parada_id}/completar', [RutaController::class, 'completarParada']);
     Route::post('/rutas/{ruta_id}/completar', [RutaController::class, 'completarRuta']);
     Route::post('/paradas/{parada_id}/llegar', [RutaController::class, 'llegarAParada']);
     
