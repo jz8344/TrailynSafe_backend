@@ -418,17 +418,17 @@ class RutaController extends Controller
                     $asistenciaExistente = Asistencia::where([
                         'hijo_id' => $parada->confirmacion->hijo_id,
                         'viaje_id' => $parada->ruta->viaje_id,
-                        'parada_id' => $parada->id
+                        'parada_ruta_id' => $parada->id
                     ])->first();
                     
                     if (!$asistenciaExistente) {
                         Asistencia::create([
                             'hijo_id' => $parada->confirmacion->hijo_id,
                             'viaje_id' => $parada->ruta->viaje_id,
-                            'parada_id' => $parada->id,
+                            'parada_ruta_id' => $parada->id,
                             'estado' => 'presente',
-                            'hora_registro' => now(),
-                            'metodo_registro' => 'chofer'
+                            'codigo_qr_escaneado' => 'completado_por_chofer',
+                            'hora_escaneo' => now()
                         ]);
                     }
                 }
@@ -501,6 +501,221 @@ class RutaController extends Controller
                 'error' => $e->getMessage()
             ], 422);
         }
+    }
+
+    /**
+     * Completar parada con escaneo de QR (Chofer)
+     * 🆕 Valida código QR del hijo y proximidad antes de completar
+     */
+    public function completarParadaConQR(Request $request, $rutaId, $paradaId)
+    {
+        try {
+            // Validar datos de entrada
+            $validator = Validator::make($request->all(), [
+                'codigo_qr' => 'required|string',
+                'latitud' => 'required|numeric|between:-90,90',
+                'longitud' => 'required|numeric|between:-180,180'
+            ]);
+            
+            if ($validator->fails()) {
+                return response()->json([
+                    'error' => 'Datos inválidos',
+                    'details' => $validator->errors()
+                ], 422);
+            }
+            
+            $parada = ParadaRuta::with(['ruta.viaje', 'confirmacion.hijo'])->findOrFail($paradaId);
+            
+            // Validar permisos
+            $chofer = auth('chofer-sanctum')->user();
+            
+            if (!$chofer || $parada->ruta->viaje->chofer_id !== $chofer->id) {
+                return response()->json([
+                    'error' => 'No tienes permisos para esta parada'
+                ], 403);
+            }
+            
+            // Validar que la parada pertenece a la ruta
+            if ($parada->ruta_id !== (int)$rutaId) {
+                return response()->json([
+                    'error' => 'La parada no pertenece a esta ruta'
+                ], 422);
+            }
+            
+            // IDEMPOTENCIA: Si ya está completada, retornar éxito
+            if ($parada->estado === 'completada') {
+                return response()->json([
+                    'message' => 'Parada ya completada',
+                    'parada' => $parada,
+                    'ya_completada' => true
+                ], 200);
+            }
+            
+            // Validar que hay una confirmación asociada
+            if (!$parada->confirmacion || !$parada->confirmacion->hijo) {
+                return response()->json([
+                    'error' => 'Esta parada no tiene un hijo asociado'
+                ], 422);
+            }
+            
+            // Validar código QR (formato: hijo_{id})
+            $codigoQR = $request->codigo_qr;
+            $hijoId = $parada->confirmacion->hijo_id;
+            $codigoEsperado = "hijo_{$hijoId}";
+            
+            if ($codigoQR !== $codigoEsperado) {
+                Log::warning('Código QR inválido', [
+                    'esperado' => $codigoEsperado,
+                    'recibido' => $codigoQR,
+                    'parada_id' => $parada->id
+                ]);
+                
+                return response()->json([
+                    'error' => 'Código QR incorrecto. Este código no corresponde al hijo de esta parada.',
+                    'codigo_esperado' => $codigoEsperado,
+                    'codigo_recibido' => $codigoQR
+                ], 422);
+            }
+            
+            // Validar proximidad (50 metros)
+            $distancia = $this->calcularDistancia(
+                $request->latitud,
+                $request->longitud,
+                floatval($parada->latitud),
+                floatval($parada->longitud)
+            );
+            
+            if ($distancia > 50) {
+                return response()->json([
+                    'error' => 'Estás demasiado lejos de la parada',
+                    'distancia_metros' => round($distancia, 2),
+                    'distancia_maxima' => 50
+                ], 422);
+            }
+            
+            DB::beginTransaction();
+            
+            try {
+                // Marcar parada como completada
+                $parada->estado = 'completada';
+                $parada->save();
+                
+                // Registrar asistencia del hijo
+                $asistenciaExistente = Asistencia::where([
+                    'hijo_id' => $parada->confirmacion->hijo_id,
+                    'viaje_id' => $parada->ruta->viaje_id,
+                    'parada_ruta_id' => $parada->id
+                ])->first();
+                
+                if (!$asistenciaExistente) {
+                    Asistencia::create([
+                        'hijo_id' => $parada->confirmacion->hijo_id,
+                        'viaje_id' => $parada->ruta->viaje_id,
+                        'parada_ruta_id' => $parada->id,
+                        'estado' => 'presente',
+                        'codigo_qr_escaneado' => $codigoQR,
+                        'hora_escaneo' => now(),
+                        'latitud_escaneo' => $request->latitud,
+                        'longitud_escaneo' => $request->longitud
+                    ]);
+                }
+                
+                // Verificar si hay una siguiente parada
+                $siguienteParada = ParadaRuta::where('ruta_id', $parada->ruta_id)
+                    ->where('orden', $parada->orden + 1)
+                    ->first();
+                
+                if ($siguienteParada) {
+                    $siguienteParada->estado = 'en_camino';
+                    $siguienteParada->save();
+                }
+                
+                // 🔄 REGENERAR POLYLINE desde GPS actual
+                $gpsActual = [
+                    'lat' => floatval($request->latitud),
+                    'lng' => floatval($request->longitud)
+                ];
+                
+                $escuela = [
+                    'lat' => floatval($parada->ruta->viaje->escuela->latitud),
+                    'lng' => floatval($parada->ruta->viaje->escuela->longitud)
+                ];
+                
+                // Obtener paradas pendientes
+                $paradasPendientes = $parada->ruta->paradas()
+                    ->where('estado', '!=', 'completada')
+                    ->orderBy('orden')
+                    ->get()
+                    ->map(function($p) {
+                        return [
+                            'lat' => floatval($p->latitud),
+                            'lng' => floatval($p->longitud),
+                            'direccion' => $p->direccion
+                        ];
+                    })
+                    ->toArray();
+                
+                if (!empty($paradasPendientes)) {
+                    $optimizacionService = new \App\Services\RutaOptimizacionService();
+                    $nuevoPolyline = $optimizacionService->regenerarPolylineDesdeGPS(
+                        $gpsActual,
+                        $paradasPendientes,
+                        $escuela
+                    );
+                    
+                    $parada->ruta->polyline = $nuevoPolyline;
+                    $parada->ruta->save();
+                    
+                    Log::info('🗺️ Polyline regenerado después de escaneo QR', [
+                        'ruta_id' => $parada->ruta_id,
+                        'parada_completada' => $parada->id,
+                        'hijo' => $parada->confirmacion->hijo->nombre,
+                        'codigo_qr' => $codigoQR,
+                        'distancia_metros' => round($distancia, 2)
+                    ]);
+                }
+                
+                DB::commit();
+                
+                return response()->json([
+                    'message' => 'Parada completada exitosamente con QR',
+                    'parada' => $parada->load('confirmacion.hijo'),
+                    'siguiente_parada' => $siguienteParada,
+                    'asistencia_registrada' => true,
+                    'hijo' => $parada->confirmacion->hijo->nombre,
+                    'distancia_metros' => round($distancia, 2)
+                ], 200);
+                
+            } catch (\Exception $e) {
+                DB::rollBack();
+                throw $e;
+            }
+            
+        } catch (\Exception $e) {
+            Log::error('Error al completar parada con QR: ' . $e->getMessage());
+            return response()->json([
+                'error' => $e->getMessage()
+            ], 422);
+        }
+    }
+    
+    /**
+     * Calcular distancia entre dos puntos GPS (fórmula Haversine)
+     */
+    private function calcularDistancia($lat1, $lon1, $lat2, $lon2)
+    {
+        $earthRadius = 6371000; // Radio de la Tierra en metros
+        
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLon = deg2rad($lon2 - $lon1);
+        
+        $a = sin($dLat / 2) * sin($dLat / 2) +
+             cos(deg2rad($lat1)) * cos(deg2rad($lat2)) *
+             sin($dLon / 2) * sin($dLon / 2);
+        
+        $c = 2 * atan2(sqrt($a), sqrt(1 - $a));
+        
+        return $earthRadius * $c; // Retorna distancia en metros
     }
 
     /**
