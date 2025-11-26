@@ -1056,20 +1056,19 @@ class ViajeController extends Controller
 
                 // Crear registro de Ruta
                 $ruta = Ruta::create([
+                    'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
                     'viaje_id' => $viaje->id,
                     'escuela_id' => $viaje->escuela_id,
-                    'chofer_id' => $viaje->chofer_id,
-                    'latitud_inicio' => $escuelaCoordenadas['lat'],
-                    'longitud_inicio' => $escuelaCoordenadas['lng'],
-                    'latitud_fin' => $escuelaCoordenadas['lat'],
-                    'longitud_fin' => $escuelaCoordenadas['lng'],
                     'distancia_total_km' => $rutaOptimizada['distancia_total_km'] ?? 0,
-                    'tiempo_estimado_min' => $rutaOptimizada['tiempo_total_min'] ?? 0,
-                    'polyline' => $rutaOptimizada['polyline'] ?? null,
+                    'tiempo_estimado_minutos' => $rutaOptimizada['tiempo_total_min'] ?? 0,
                     'estado' => 'pendiente',
+                    'algoritmo_utilizado' => 'k-means-clustering',
+                    'parametros_algoritmo' => [
+                        'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1,
+                        'algoritmo_tsp' => 'Greedy TSP',
+                        'total_paradas' => count($rutaOptimizada['paradas_ordenadas'] ?? [])
+                    ],
                     'fecha_generacion' => now(),
-                    'algoritmo_usado' => 'K-means + Greedy TSP',
-                    'num_clusters' => $rutaOptimizada['num_clusters'] ?? 1
                 ]);
 
                 // Calcular hora de inicio (viaje empieza antes de la hora programada)
