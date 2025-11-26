@@ -1054,6 +1054,15 @@ class ViajeController extends Controller
                     throw new \Exception($rutaOptimizada['error'] ?? 'Error desconocido al optimizar ruta');
                 }
 
+                // Verificar si ya existe una ruta para este viaje y eliminarla
+                $rutaExistente = Ruta::where('viaje_id', $viaje->id)->first();
+                if ($rutaExistente) {
+                    Log::info("Eliminando ruta existente para viaje {$viaje->id}", ['ruta_id' => $rutaExistente->id]);
+                    // Eliminar paradas asociadas (cascade debería hacerlo, pero por si acaso)
+                    $rutaExistente->paradas()->delete();
+                    $rutaExistente->delete();
+                }
+
                 // Crear registro de Ruta
                 $ruta = Ruta::create([
                     'nombre' => "Ruta Viaje #{$viaje->id} - {$viaje->escuela->nombre}",
