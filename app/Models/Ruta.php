@@ -79,8 +79,8 @@ class Ruta extends Model
 
     public function iniciar()
     {
-        if ($this->estado !== 'activa') {
-            throw new \Exception('Solo se pueden iniciar rutas activas');
+        if (!in_array($this->estado, ['pendiente', 'activa'])) {
+            throw new \Exception('Solo se pueden iniciar rutas pendientes o activas');
         }
         
         $this->estado = 'en_progreso';
