@@ -241,4 +241,65 @@ class AdminController extends Controller
         
         return response()->json(['authenticated' => false], 401);
     }
+
+    /**
+     * Proxy para el servicio de análisis K-means Flask
+     * Opcional: puede usarse para agregar autenticación/logging
+     */
+    public function proxyKmeansAnalysis(Request $request)
+    {
+        try {
+            // URL del servicio Flask (desde variable de entorno o configuración)
+            $kmeansUrl = env('KMEANS_API_URL', 'https://kmeans-flask-production.up.railway.app');
+            
+            // Preparar datos para enviar
+            $data = [
+                'driver_id' => $request->input('driver_id'),
+                'n_samples' => $request->input('n_samples', 1000)
+            ];
+
+            // Hacer la petición al servicio Flask
+            $ch = curl_init($kmeansUrl . '/api/analyze/driver');
+            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+            curl_setopt($ch, CURLOPT_HTTPHEADER, [
+                'Content-Type: application/json',
+                'Accept: application/json'
+            ]);
+            curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+
+            $response = curl_exec($ch);
+            $httpCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+            $error = curl_error($ch);
+            curl_close($ch);
+
+            if ($error) {
+                \Log::error("Error en proxy K-means: {$error}");
+                return response()->json([
+                    'error' => 'Error al conectar con el servicio de análisis',
+                    'details' => $error
+                ], 500);
+            }
+
+            if ($httpCode !== 200) {
+                \Log::warning("K-means API retornó código {$httpCode}");
+                return response()->json([
+                    'error' => 'Error en el servicio de análisis',
+                    'status_code' => $httpCode
+                ], $httpCode);
+            }
+
+            // Retornar la respuesta del servicio Flask
+            return response($response, 200)
+                ->header('Content-Type', 'application/json');
+
+        } catch (\Exception $e) {
+            \Log::error("Excepción en proxyKmeansAnalysis: " . $e->getMessage());
+            return response()->json([
+                'error' => 'Error interno del servidor',
+                'message' => $e->getMessage()
+            ], 500);
+        }
+    }
 }

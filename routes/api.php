@@ -198,6 +198,9 @@ Route::middleware(['auth:sanctum'])->group(function () {
 Route::middleware(['auth:admin-sanctum'])->prefix('admin')->group(function () {
     Route::get('/tracking/ruta/{ruta_id}/historial', [TrackingController::class, 'historialRuta']);
     Route::post('/tracking/limpiar', [TrackingController::class, 'limpiarUbicacionesAntiguas']);
+    
+    // Proxy para servicio de análisis K-means (opcional, puede llamarse directamente desde frontend)
+    Route::post('/analytics/kmeans', [AdminController::class, 'proxyKmeansAnalysis']);
 });
 
 
