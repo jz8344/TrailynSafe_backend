@@ -15,6 +15,7 @@ class ConfirmacionViaje extends Model
         'viaje_id',
         'hijo_id',
         'padre_id',
+        'fecha_viaje', // NUEVO: Para qué fecha específica es esta confirmación
         'direccion_recogida',
         'referencia',
         'latitud',
@@ -26,6 +27,7 @@ class ConfirmacionViaje extends Model
     ];
 
     protected $casts = [
+        'fecha_viaje' => 'date', // NUEVO
         'latitud' => 'decimal:8',
         'longitud' => 'decimal:8',
         'hora_confirmacion' => 'datetime',
@@ -80,6 +82,22 @@ class ConfirmacionViaje extends Model
     public function scopeByHijo($query, $hijoId)
     {
         return $query->where('hijo_id', $hijoId);
+    }
+
+    /**
+     * Filtrar confirmaciones por fecha específica del viaje
+     */
+    public function scopeByFechaViaje($query, $fecha)
+    {
+        return $query->where('fecha_viaje', $fecha);
+    }
+
+    /**
+     * Filtrar confirmaciones para hoy
+     */
+    public function scopeParaHoy($query)
+    {
+        return $query->where('fecha_viaje', now()->format('Y-m-d'));
     }
 
     // ==================== MÉTODOS ====================

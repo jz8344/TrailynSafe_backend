@@ -41,6 +41,11 @@ class ConfirmacionController extends Controller
 
     /**
      * Confirmar asistencia a un viaje (Usuario/Padre)
+     * 
+     * LÓGICA TIPO ALARMA:
+     * - Valida que el viaje aplique para HOY
+     * - Valida que esté en ventana de confirmaciones
+     * - Guarda la fecha específica de la confirmación
      */
     public function confirmar(Request $request, $viajeId)
     {
@@ -63,14 +68,18 @@ class ConfirmacionController extends Controller
             $user = auth()->user();
             $viaje = Viaje::findOrFail($viajeId);
             $hijo = Hijo::findOrFail($request->hijo_id);
+            $hoy = now()->format('Y-m-d');
             
-            // VALIDACIÓN CRÍTICA: Solo permitir confirmaciones si el viaje está en 'en_confirmaciones'
-            if ($viaje->estado !== 'en_confirmaciones') {
-                Log::warning("Intento de confirmar viaje {$viaje->id} en estado '{$viaje->estado}' (debe estar en 'en_confirmaciones')");
+            // VALIDACIÓN TIPO ALARMA: Verificar estado efectivo en tiempo real
+            $estadoEfectivo = $viaje->getEstadoEfectivoHoy();
+            
+            if ($estadoEfectivo['estado'] !== 'en_confirmaciones') {
+                Log::warning("Intento de confirmar viaje {$viaje->id} - Estado efectivo: '{$estadoEfectivo['estado']}' (debe estar en 'en_confirmaciones')");
                 return response()->json([
                     'error' => 'Este viaje no está aceptando confirmaciones actualmente',
-                    'estado_actual' => $viaje->estado,
-                    'mensaje' => 'El viaje debe estar en estado "En Confirmaciones" para poder confirmar tu participación'
+                    'estado_efectivo' => $estadoEfectivo['estado'],
+                    'mensaje' => $estadoEfectivo['mensaje'],
+                    'datos' => $estadoEfectivo['datos']
                 ], 400);
             }
             
@@ -81,22 +90,27 @@ class ConfirmacionController extends Controller
                 ], 403);
             }
             
-            // Validar que el viaje esté en confirmaciones
-            if (!$viaje->puedeConfirmar()) {
+            // Validar cupo disponible
+            $confirmacionesHoy = $viaje->getConfirmacionesParaFecha($hoy);
+            if ($confirmacionesHoy >= $viaje->cupo_maximo) {
                 return response()->json([
-                    'error' => 'Este viaje no está disponible para confirmaciones o está lleno'
+                    'error' => 'Este viaje ya alcanzó el cupo máximo para hoy',
+                    'cupo_maximo' => $viaje->cupo_maximo,
+                    'confirmaciones_hoy' => $confirmacionesHoy
                 ], 422);
             }
             
-            // Validar que no exista ya una confirmación activa
+            // Validar que no exista ya una confirmación activa PARA HOY
             $confirmacionExistente = ConfirmacionViaje::where('viaje_id', $viajeId)
                 ->where('hijo_id', $hijo->id)
+                ->where('fecha_viaje', $hoy)
                 ->where('estado', 'confirmado')
                 ->first();
             
             if ($confirmacionExistente) {
                 return response()->json([
-                    'error' => 'Ya existe una confirmación activa para este hijo en este viaje'
+                    'error' => 'Ya existe una confirmación activa para este hijo en este viaje para hoy',
+                    'confirmacion_existente' => $confirmacionExistente->id
                 ], 422);
             }
             
@@ -108,6 +122,7 @@ class ConfirmacionController extends Controller
                     'viaje_id' => $viajeId,
                     'hijo_id' => $hijo->id,
                     'padre_id' => $user->id,
+                    'fecha_viaje' => $hoy, // NUEVO: Fecha específica de la confirmación
                     'direccion_recogida' => $request->direccion_recogida,
                     'referencia' => $request->referencia,
                     'latitud' => $request->latitud,
@@ -116,16 +131,22 @@ class ConfirmacionController extends Controller
                     'estado' => 'confirmado'
                 ]);
                 
-                // Incrementar contador de confirmaciones
+                // Incrementar contador de confirmaciones (total histórico)
                 $viaje->agregarConfirmacion();
                 
                 DB::commit();
                 
                 $confirmacion->load(['hijo', 'padre', 'viaje']);
                 
+                // Obtener conteo actualizado para hoy
+                $confirmacionesActualizadas = $viaje->getConfirmacionesParaFecha($hoy);
+                
                 return response()->json([
-                    'message' => 'Confirmación registrada exitosamente',
-                    'confirmacion' => $confirmacion
+                    'message' => '¡Confirmación registrada exitosamente!',
+                    'confirmacion' => $confirmacion,
+                    'fecha_viaje' => $hoy,
+                    'confirmaciones_hoy' => $confirmacionesActualizadas,
+                    'cupo_disponible' => max(0, $viaje->cupo_maximo - $confirmacionesActualizadas)
                 ], 201);
                 
             } catch (\Exception $e) {

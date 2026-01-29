@@ -361,4 +361,379 @@ class Viaje extends Model
             default => 'secondary'
         };
     }
+
+    // ==================== LÓGICA TIPO ALARMA ====================
+    
+    /**
+     * Constante: Tolerancia en minutos antes/después de la hora de salida
+     * para permitir interacción con el viaje
+     */
+    const TOLERANCIA_MINUTOS = 20;
+
+    /**
+     * Determina si el viaje aplica para una fecha específica (tipo alarma)
+     * 
+     * Evalúa: ¿Hoy es un día válido para este viaje?
+     * - Para viajes únicos: ¿Es exactamente la fecha del viaje?
+     * - Para recurrentes: ¿Está dentro del rango Y es un día de la semana configurado?
+     *
+     * @param Carbon|null $fecha Fecha a evaluar (default: hoy)
+     * @return bool
+     */
+    public function aplicaParaFecha($fecha = null): bool
+    {
+        $fecha = $fecha ? Carbon::parse($fecha) : Carbon::today();
+        
+        // Si está cancelado o finalizado, no aplica
+        if (in_array($this->estado, ['cancelado', 'finalizado'])) {
+            return false;
+        }
+        
+        if ($this->tipo_viaje === 'unico') {
+            // Para viaje único: debe ser exactamente esa fecha
+            return $this->fecha_viaje && $this->fecha_viaje->isSameDay($fecha);
+        }
+        
+        // Para viaje recurrente:
+        // 1. Verificar que esté dentro del rango de fechas
+        if (!$this->fecha_inicio_recurrencia || !$this->fecha_fin_recurrencia) {
+            return false;
+        }
+        
+        if ($fecha->lt($this->fecha_inicio_recurrencia) || $fecha->gt($this->fecha_fin_recurrencia)) {
+            return false;
+        }
+        
+        // 2. Verificar que sea un día de la semana configurado
+        // dias_semana es array de números: 0=Domingo, 1=Lunes, ..., 6=Sábado
+        $diaHoy = $fecha->dayOfWeek; // Carbon: 0=Domingo, 6=Sábado
+        $diasConfigurados = $this->dias_semana ?? [];
+        
+        // Convertir a enteros por si vienen como strings
+        $diasConfigurados = array_map('intval', $diasConfigurados);
+        
+        return in_array($diaHoy, $diasConfigurados);
+    }
+
+    /**
+     * Obtiene el estado efectivo del viaje para HOY basado en la hora actual
+     * (Lógica tipo alarma: evalúa en tiempo real)
+     *
+     * Estados posibles:
+     * - 'no_aplica': El viaje no es para hoy
+     * - 'programado': Aún no llega la hora de confirmaciones
+     * - 'en_confirmaciones': Padres pueden confirmar asistencia
+     * - 'confirmado': Ventana cerrada, esperando generar ruta
+     * - 'interactuable': Dentro de ventana ±20min de hora salida (puede generar ruta/iniciar)
+     * - 'en_curso': Viaje en progreso
+     * - 'expirado': Ya pasó el tiempo de tolerancia
+     * - 'finalizado': Viaje completado
+     * - 'cancelado': Viaje cancelado
+     *
+     * @param Carbon|null $ahora Momento a evaluar (default: ahora)
+     * @return array ['estado' => string, 'mensaje' => string, 'datos' => array]
+     */
+    public function getEstadoEfectivoHoy($ahora = null): array
+    {
+        $ahora = $ahora ? Carbon::parse($ahora) : Carbon::now();
+        $hoy = $ahora->copy()->startOfDay();
+        
+        // Si ya está en estado terminal, retornar ese estado
+        if ($this->estado === 'cancelado') {
+            return [
+                'estado' => 'cancelado',
+                'mensaje' => 'Viaje cancelado',
+                'interactuable' => false,
+                'datos' => ['motivo' => $this->motivo_cancelacion]
+            ];
+        }
+        
+        if ($this->estado === 'finalizado') {
+            return [
+                'estado' => 'finalizado',
+                'mensaje' => 'Viaje completado',
+                'interactuable' => false,
+                'datos' => []
+            ];
+        }
+        
+        // Si el viaje está en_curso, permitir interacción
+        if ($this->estado === 'en_curso') {
+            return [
+                'estado' => 'en_curso',
+                'mensaje' => 'Viaje en progreso',
+                'interactuable' => true,
+                'datos' => ['ruta_id' => $this->ruta_id]
+            ];
+        }
+        
+        // Verificar si aplica para hoy
+        if (!$this->aplicaParaFecha($hoy)) {
+            return [
+                'estado' => 'no_aplica',
+                'mensaje' => 'Este viaje no aplica para hoy',
+                'interactuable' => false,
+                'datos' => ['proxima_fecha' => $this->getProximaFechaAplica()]
+            ];
+        }
+        
+        // Obtener horas clave del viaje
+        $horaSalida = $this->getHoraSalidaCarbon($hoy);
+        $horaInicioConf = $this->getHoraInicioConfirmacionesCarbon($hoy);
+        $horaFinConf = $this->getHoraFinConfirmacionesCarbon($hoy);
+        
+        // Calcular ventana de tolerancia (±20 min de hora salida)
+        $inicioTolerancia = $horaSalida->copy()->subMinutes(self::TOLERANCIA_MINUTOS);
+        $finTolerancia = $horaSalida->copy()->addMinutes(self::TOLERANCIA_MINUTOS);
+        
+        // Calcular tiempo restante
+        $minutosParaSalida = $ahora->diffInMinutes($horaSalida, false);
+        
+        // EVALUAR ESTADO SEGÚN HORA ACTUAL
+        
+        // 1. Ya pasó el tiempo de tolerancia → Expirado
+        if ($ahora->gt($finTolerancia) && $this->estado !== 'en_curso') {
+            return [
+                'estado' => 'expirado',
+                'mensaje' => 'El tiempo para este viaje ha expirado',
+                'interactuable' => false,
+                'datos' => [
+                    'hora_salida' => $horaSalida->format('H:i'),
+                    'expiro_hace' => abs($minutosParaSalida) . ' minutos'
+                ]
+            ];
+        }
+        
+        // 2. Dentro de ventana de tolerancia → Interactuable (puede generar ruta/iniciar)
+        if ($ahora->between($inicioTolerancia, $finTolerancia)) {
+            $confirmacionesHoy = $this->getConfirmacionesParaFecha($hoy);
+            $puedeGenerarRuta = $confirmacionesHoy >= $this->cupo_minimo;
+            
+            return [
+                'estado' => 'interactuable',
+                'mensaje' => $puedeGenerarRuta 
+                    ? '¡Listo para generar ruta e iniciar viaje!' 
+                    : "Faltan confirmaciones (mínimo: {$this->cupo_minimo})",
+                'interactuable' => true,
+                'puede_generar_ruta' => $puedeGenerarRuta,
+                'puede_iniciar' => $puedeGenerarRuta && $this->ruta_id !== null,
+                'datos' => [
+                    'hora_salida' => $horaSalida->format('H:i'),
+                    'minutos_para_salida' => $minutosParaSalida,
+                    'confirmaciones_hoy' => $confirmacionesHoy,
+                    'cupo_minimo' => $this->cupo_minimo,
+                    'cupo_maximo' => $this->cupo_maximo,
+                    'ventana_cierra_en' => $finTolerancia->diffInMinutes($ahora) . ' min'
+                ]
+            ];
+        }
+        
+        // 3. Después de cierre de confirmaciones pero antes de tolerancia → Confirmado/Esperando
+        if ($ahora->gt($horaFinConf) && $ahora->lt($inicioTolerancia)) {
+            $confirmacionesHoy = $this->getConfirmacionesParaFecha($hoy);
+            
+            return [
+                'estado' => 'confirmado',
+                'mensaje' => 'Confirmaciones cerradas. Esperando hora de salida.',
+                'interactuable' => false,
+                'datos' => [
+                    'hora_salida' => $horaSalida->format('H:i'),
+                    'minutos_para_interactuar' => $inicioTolerancia->diffInMinutes($ahora),
+                    'confirmaciones_hoy' => $confirmacionesHoy,
+                    'cumple_minimo' => $confirmacionesHoy >= $this->cupo_minimo
+                ]
+            ];
+        }
+        
+        // 4. Dentro de ventana de confirmaciones → En confirmaciones
+        if ($ahora->between($horaInicioConf, $horaFinConf)) {
+            $confirmacionesHoy = $this->getConfirmacionesParaFecha($hoy);
+            
+            return [
+                'estado' => 'en_confirmaciones',
+                'mensaje' => 'Los padres pueden confirmar asistencia',
+                'interactuable' => true, // Padres pueden confirmar, chofer puede ver
+                'datos' => [
+                    'hora_salida' => $horaSalida->format('H:i'),
+                    'ventana_cierra' => $horaFinConf->format('H:i'),
+                    'minutos_restantes' => $horaFinConf->diffInMinutes($ahora),
+                    'confirmaciones_hoy' => $confirmacionesHoy,
+                    'cupo_minimo' => $this->cupo_minimo,
+                    'cupo_maximo' => $this->cupo_maximo,
+                    'cupo_disponible' => max(0, $this->cupo_maximo - $confirmacionesHoy)
+                ]
+            ];
+        }
+        
+        // 5. Antes de la ventana de confirmaciones → Programado
+        return [
+            'estado' => 'programado',
+            'mensaje' => 'Viaje programado. Confirmaciones abren pronto.',
+            'interactuable' => false,
+            'datos' => [
+                'hora_salida' => $horaSalida->format('H:i'),
+                'confirmaciones_abren' => $horaInicioConf->format('H:i'),
+                'minutos_para_abrir' => $horaInicioConf->diffInMinutes($ahora)
+            ]
+        ];
+    }
+
+    /**
+     * Obtiene la hora de salida como Carbon para una fecha específica
+     */
+    public function getHoraSalidaCarbon($fecha): Carbon
+    {
+        $fecha = Carbon::parse($fecha)->format('Y-m-d');
+        $hora = $this->hora_salida_programada;
+        
+        if ($hora instanceof Carbon) {
+            $hora = $hora->format('H:i:s');
+        }
+        
+        return Carbon::parse("{$fecha} {$hora}");
+    }
+
+    /**
+     * Obtiene la hora de inicio de confirmaciones como Carbon
+     * Considera que puede ser del día anterior (ej: 18:00 de ayer para viaje de hoy)
+     */
+    public function getHoraInicioConfirmacionesCarbon($fechaViaje): Carbon
+    {
+        $fechaViaje = Carbon::parse($fechaViaje);
+        $horaInicio = $this->hora_inicio_confirmaciones;
+        $horaFin = $this->hora_fin_confirmaciones;
+        
+        if ($horaInicio instanceof Carbon) {
+            $horaInicio = $horaInicio->format('H:i:s');
+        }
+        if ($horaFin instanceof Carbon) {
+            $horaFin = $horaFin->format('H:i:s');
+        }
+        
+        // Si hora inicio > hora fin, significa que cruza medianoche
+        // Ej: inicio 18:00, fin 05:30 → inicio es del día anterior
+        if ($horaInicio > $horaFin) {
+            return Carbon::parse($fechaViaje->copy()->subDay()->format('Y-m-d') . ' ' . $horaInicio);
+        }
+        
+        return Carbon::parse($fechaViaje->format('Y-m-d') . ' ' . $horaInicio);
+    }
+
+    /**
+     * Obtiene la hora de fin de confirmaciones como Carbon
+     */
+    public function getHoraFinConfirmacionesCarbon($fechaViaje): Carbon
+    {
+        $fechaViaje = Carbon::parse($fechaViaje);
+        $horaFin = $this->hora_fin_confirmaciones;
+        
+        if ($horaFin instanceof Carbon) {
+            $horaFin = $horaFin->format('H:i:s');
+        }
+        
+        return Carbon::parse($fechaViaje->format('Y-m-d') . ' ' . $horaFin);
+    }
+
+    /**
+     * Cuenta las confirmaciones para una fecha específica
+     */
+    public function getConfirmacionesParaFecha($fecha): int
+    {
+        $fecha = Carbon::parse($fecha)->format('Y-m-d');
+        
+        return $this->confirmaciones()
+            ->where('estado', 'confirmado')
+            ->where(function($query) use ($fecha) {
+                // Buscar por fecha_viaje si existe, sino por fecha de hoy para retrocompatibilidad
+                $query->where('fecha_viaje', $fecha)
+                      ->orWhereNull('fecha_viaje');
+            })
+            ->count();
+    }
+
+    /**
+     * Obtiene la próxima fecha en que aplica este viaje
+     */
+    public function getProximaFechaAplica(): ?string
+    {
+        $fecha = Carbon::today();
+        
+        // Buscar en los próximos 30 días
+        for ($i = 0; $i < 30; $i++) {
+            $fecha = $fecha->addDay();
+            if ($this->aplicaParaFecha($fecha)) {
+                return $fecha->format('Y-m-d');
+            }
+        }
+        
+        return null;
+    }
+
+    /**
+     * Verifica si el viaje está en ventana interactuable ahora
+     */
+    public function estaEnVentanaInteractuable(): bool
+    {
+        $estado = $this->getEstadoEfectivoHoy();
+        return $estado['estado'] === 'interactuable' || $estado['estado'] === 'en_curso';
+    }
+
+    /**
+     * Verifica si se pueden registrar confirmaciones ahora
+     */
+    public function puedeRecibirConfirmaciones(): bool
+    {
+        $estado = $this->getEstadoEfectivoHoy();
+        return $estado['estado'] === 'en_confirmaciones';
+    }
+
+    /**
+     * Obtiene información completa del viaje para API móvil
+     */
+    public function getInfoParaMovil(): array
+    {
+        $estadoEfectivo = $this->getEstadoEfectivoHoy();
+        
+        return [
+            'id' => $this->id,
+            'nombre' => $this->nombre,
+            'tipo_viaje' => $this->tipo_viaje,
+            'turno' => $this->turno,
+            'escuela' => $this->escuela ? [
+                'id' => $this->escuela->id,
+                'nombre' => $this->escuela->nombre,
+                'direccion' => $this->escuela->direccion,
+                'latitud' => $this->escuela->latitud,
+                'longitud' => $this->escuela->longitud,
+            ] : null,
+            'unidad' => $this->unidad ? [
+                'id' => $this->unidad->id,
+                'matricula' => $this->unidad->matricula,
+                'capacidad' => $this->unidad->capacidad,
+            ] : null,
+            'hora_salida' => $this->hora_salida_programada?->format('H:i'),
+            'cupo_minimo' => $this->cupo_minimo,
+            'cupo_maximo' => $this->cupo_maximo,
+            
+            // Estado efectivo (lógica tipo alarma)
+            'estado_efectivo' => $estadoEfectivo['estado'],
+            'estado_mensaje' => $estadoEfectivo['mensaje'],
+            'interactuable' => $estadoEfectivo['interactuable'],
+            'estado_datos' => $estadoEfectivo['datos'],
+            
+            // Ruta si existe
+            'ruta' => $this->ruta ? [
+                'id' => $this->ruta->id,
+                'estado' => $this->ruta->estado,
+                'distancia_km' => $this->ruta->distancia_total_km,
+                'tiempo_min' => $this->ruta->tiempo_estimado_minutos,
+                'polyline' => $this->ruta->polyline,
+                'paradas_count' => $this->ruta->paradas()->count(),
+            ] : null,
+            
+            // Metadatos
+            'aplica_hoy' => $this->aplicaParaFecha(),
+            'fecha_evaluacion' => Carbon::now()->toIso8601String(),
+        ];
+    }
 }

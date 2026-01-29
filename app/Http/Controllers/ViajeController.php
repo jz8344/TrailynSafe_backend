@@ -703,6 +703,11 @@ class ViajeController extends Controller
 
     /**
      * Obtener viajes asignados al chofer (Chofer)
+     * 
+     * LÓGICA TIPO ALARMA:
+     * - Evalúa en tiempo real qué viajes aplican para HOY
+     * - Calcula el estado efectivo según la hora actual
+     * - Incluye ventana de tolerancia de ±20 minutos
      */
     public function viajesChofer(Request $request)
     {
@@ -713,19 +718,114 @@ class ViajeController extends Controller
                 return response()->json(['error' => 'No autenticado'], 401);
             }
 
-            Log::info("viajesChofer - Chofer ID: {$chofer->id}, Nombre: {$chofer->nombre}");
+            $ahora = Carbon::now();
+            $hoy = Carbon::today();
+            
+            Log::info("viajesChofer - Chofer ID: {$chofer->id}, Nombre: {$chofer->nombre}, Hora: {$ahora->toIso8601String()}");
 
-            // Obtener viajes asignados a este chofer
-            $viajes = Viaje::with(['escuela', 'unidad', 'ruta.paradas'])
+            // Obtener TODOS los viajes asignados a este chofer que no estén cancelados/finalizados
+            $viajes = Viaje::with(['escuela', 'unidad', 'ruta.paradas', 'confirmaciones'])
                 ->where('chofer_id', $chofer->id)
-                ->orderByDesc('fecha_viaje')
+                ->whereNotIn('estado', ['cancelado']) // Mantener finalizados para historial
                 ->get();
 
-            Log::info("viajesChofer - Viajes encontrados: " . $viajes->count());
+            Log::info("viajesChofer - Viajes totales encontrados: " . $viajes->count());
 
-            return response()->json($viajes, 200);
+            // Procesar cada viaje con lógica tipo alarma
+            $viajesProcesados = $viajes->map(function($viaje) use ($hoy, $ahora) {
+                // Obtener estado efectivo (lógica tipo alarma)
+                $estadoEfectivo = $viaje->getEstadoEfectivoHoy($ahora);
+                
+                // Obtener confirmaciones del día
+                $confirmacionesHoy = $viaje->getConfirmacionesParaFecha($hoy);
+                
+                // Construir respuesta enriquecida
+                return [
+                    'id' => $viaje->id,
+                    'nombre' => $viaje->nombre,
+                    'tipo_viaje' => $viaje->tipo_viaje,
+                    'turno' => $viaje->turno,
+                    'hora_salida_programada' => $viaje->hora_salida_programada?->format('H:i'),
+                    'cupo_minimo' => $viaje->cupo_minimo,
+                    'cupo_maximo' => $viaje->cupo_maximo,
+                    
+                    // Estado en BD vs Estado Efectivo
+                    'estado_bd' => $viaje->estado,
+                    'estado' => $estadoEfectivo['estado'], // Estado calculado en tiempo real
+                    'estado_mensaje' => $estadoEfectivo['mensaje'],
+                    'interactuable' => $estadoEfectivo['interactuable'],
+                    'estado_datos' => $estadoEfectivo['datos'],
+                    
+                    // Confirmaciones del día actual
+                    'confirmaciones_hoy' => $confirmacionesHoy,
+                    'confirmaciones_actuales' => $viaje->confirmaciones_actuales, // Total histórico
+                    'puede_generar_ruta' => $estadoEfectivo['puede_generar_ruta'] ?? false,
+                    'puede_iniciar' => $estadoEfectivo['puede_iniciar'] ?? false,
+                    
+                    // Aplica para hoy?
+                    'aplica_hoy' => $viaje->aplicaParaFecha($hoy),
+                    
+                    // Relaciones
+                    'escuela' => $viaje->escuela ? [
+                        'id' => $viaje->escuela->id,
+                        'nombre' => $viaje->escuela->nombre,
+                        'direccion' => $viaje->escuela->direccion,
+                        'latitud' => $viaje->escuela->latitud,
+                        'longitud' => $viaje->escuela->longitud,
+                    ] : null,
+                    'unidad' => $viaje->unidad ? [
+                        'id' => $viaje->unidad->id,
+                        'matricula' => $viaje->unidad->matricula,
+                        'capacidad' => $viaje->unidad->capacidad,
+                    ] : null,
+                    'ruta' => $viaje->ruta ? [
+                        'id' => $viaje->ruta->id,
+                        'estado' => $viaje->ruta->estado,
+                        'distancia_total_km' => $viaje->ruta->distancia_total_km,
+                        'tiempo_estimado_minutos' => $viaje->ruta->tiempo_estimado_minutos,
+                        'polyline' => $viaje->ruta->polyline,
+                        'paradas' => $viaje->ruta->paradas?->map(function($parada) {
+                            return [
+                                'id' => $parada->id,
+                                'orden' => $parada->orden,
+                                'direccion' => $parada->direccion,
+                                'latitud' => $parada->latitud,
+                                'longitud' => $parada->longitud,
+                                'hora_estimada' => $parada->hora_estimada,
+                                'estado' => $parada->estado,
+                            ];
+                        }),
+                    ] : null,
+                    
+                    // Para ordenamiento
+                    'fecha_viaje' => $viaje->tipo_viaje === 'unico' 
+                        ? $viaje->fecha_viaje?->format('Y-m-d') 
+                        : $hoy->format('Y-m-d'),
+                ];
+            });
+
+            // Separar en secciones: HOY (aplican) y OTROS
+            $viajesHoy = $viajesProcesados->filter(fn($v) => $v['aplica_hoy'])->values();
+            $viajesOtros = $viajesProcesados->filter(fn($v) => !$v['aplica_hoy'])->values();
+
+            // Ordenar viajes de hoy por hora de salida
+            $viajesHoy = $viajesHoy->sortBy('hora_salida_programada')->values();
+
+            Log::info("viajesChofer - Viajes para HOY: " . $viajesHoy->count() . ", Otros: " . $viajesOtros->count());
+
+            return response()->json([
+                'fecha_actual' => $hoy->format('Y-m-d'),
+                'hora_actual' => $ahora->format('H:i:s'),
+                'dia_semana' => $hoy->dayOfWeek, // 0=Dom, 1=Lun...6=Sab
+                'dia_nombre' => $hoy->locale('es')->dayName,
+                'viajes_hoy' => $viajesHoy,
+                'viajes_otros' => $viajesOtros,
+                'total_viajes' => $viajes->count(),
+            ], 200);
+            
         } catch (\Exception $e) {
             Log::error('Error al obtener viajes del chofer: ' . $e->getMessage());
+            Log::error($e->getTraceAsString());
             return response()->json([
                 'error' => 'Error al obtener viajes',
                 'message' => $e->getMessage()
