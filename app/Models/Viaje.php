@@ -331,18 +331,35 @@ class Viaje extends Model
             return '-';
         }
         
-        $diasMap = [
+        // Mapeo para números (0=Domingo, 6=Sábado) - formato Carbon/JS
+        $diasMapNumerico = [
+            0 => 'D',
+            1 => 'L',
+            2 => 'M',
+            3 => 'Mi',
+            4 => 'J',
+            5 => 'V',
+            6 => 'S'
+        ];
+        
+        // Mapeo para strings (legacy)
+        $diasMapString = [
+            'domingo' => 'D',
             'lunes' => 'L',
             'martes' => 'M',
             'miercoles' => 'Mi',
             'jueves' => 'J',
             'viernes' => 'V',
-            'sabado' => 'S',
-            'domingo' => 'D'
+            'sabado' => 'S'
         ];
         
-        return implode(', ', array_map(function($dia) use ($diasMap) {
-            return $diasMap[$dia] ?? $dia;
+        return implode(', ', array_map(function($dia) use ($diasMapNumerico, $diasMapString) {
+            // Si es número, usar mapeo numérico
+            if (is_numeric($dia)) {
+                return $diasMapNumerico[(int)$dia] ?? $dia;
+            }
+            // Si es string, usar mapeo string
+            return $diasMapString[strtolower($dia)] ?? $dia;
         }, $this->dias_semana));
     }
 

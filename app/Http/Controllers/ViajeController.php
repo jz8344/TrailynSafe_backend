@@ -235,7 +235,7 @@ class ViajeController extends Controller
                 $rules['fecha_inicio_recurrencia'] = 'sometimes|date|after_or_equal:today';
                 $rules['fecha_fin_recurrencia'] = 'sometimes|date';
                 $rules['dias_semana'] = 'sometimes|array|min:1';
-                $rules['dias_semana.*'] = 'in:lunes,martes,miercoles,jueves,viernes,sabado,domingo';
+                $rules['dias_semana.*'] = 'integer|min:0|max:6'; // 0=Domingo, 6=Sábado
             }
             
             $validator = Validator::make($request->all(), $rules);
