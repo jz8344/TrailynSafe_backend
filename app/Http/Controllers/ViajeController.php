@@ -79,8 +79,10 @@ class ViajeController extends Controller
             if ($request->tipo_viaje === 'unico') {
                 $rules['fecha_viaje'] = 'required|date|after_or_equal:today';
             } else {
-                $rules['fecha_inicio_recurrencia'] = 'required|date|after_or_equal:today';
-                $rules['fecha_fin_recurrencia'] = 'required|date|after:fecha_inicio_recurrencia';
+                // Para recurrentes: la fecha de inicio puede ser pasada (viaje ya activo)
+                // Solo validamos que fecha_fin sea futura
+                $rules['fecha_inicio_recurrencia'] = 'required|date';
+                $rules['fecha_fin_recurrencia'] = 'required|date|after:fecha_inicio_recurrencia|after_or_equal:today';
                 $rules['dias_semana'] = 'required|array|min:1';
                 $rules['dias_semana.*'] = 'integer|min:0|max:6'; // 0=Domingo, 6=Sábado
             }
@@ -232,8 +234,9 @@ class ViajeController extends Controller
             if ($tipoViaje === 'unico') {
                 $rules['fecha_viaje'] = 'sometimes|date|after_or_equal:today';
             } else {
-                $rules['fecha_inicio_recurrencia'] = 'sometimes|date|after_or_equal:today';
-                $rules['fecha_fin_recurrencia'] = 'sometimes|date';
+                // Para recurrentes: la fecha de inicio puede ser pasada
+                $rules['fecha_inicio_recurrencia'] = 'sometimes|date';
+                $rules['fecha_fin_recurrencia'] = 'sometimes|date|after_or_equal:today';
                 $rules['dias_semana'] = 'sometimes|array|min:1';
                 $rules['dias_semana.*'] = 'integer|min:0|max:6'; // 0=Domingo, 6=Sábado
             }
