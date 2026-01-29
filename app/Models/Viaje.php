@@ -40,9 +40,9 @@ class Viaje extends Model
     ];
 
     protected $casts = [
-        'fecha_viaje' => 'date',
-        'fecha_inicio_recurrencia' => 'date',
-        'fecha_fin_recurrencia' => 'date',
+        'fecha_viaje' => 'date:Y-m-d',
+        'fecha_inicio_recurrencia' => 'date:Y-m-d',
+        'fecha_fin_recurrencia' => 'date:Y-m-d',
         'dias_semana' => 'array',
         'hora_salida_programada' => 'datetime:H:i',
         'hora_inicio_confirmaciones' => 'datetime:H:i',

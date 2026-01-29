@@ -227,6 +227,7 @@ class ViajeController extends Controller
                 'cupo_minimo' => 'sometimes|integer|min:1',
                 'cupo_maximo' => 'sometimes|integer|min:1',
                 'notas' => 'nullable|string',
+                'estado' => 'sometimes|in:pendiente,programado,en_confirmaciones,confirmado,generando_ruta,ruta_generada,en_curso,finalizado,cancelado',
             ];
             
             $tipoViaje = $request->tipo_viaje ?? $viaje->tipo_viaje;
