@@ -578,7 +578,10 @@ class ViajeController extends Controller
             // IMPORTANTE: Solo mostrar viajes en estado 'en_confirmaciones'
             // NO mostrar viajes en estado 'programado'
             $candidates = Viaje::with(['escuela', 'unidad', 'chofer'])
-                ->where('estado', 'en_confirmaciones')
+                // Incluir viajes que ya están en 'en_confirmaciones' y
+                // también los 'programado' para que la lógica tipo alarma
+                // pueda evaluar su ventana y permitir mostrarlos cuando aplique.
+                ->whereIn('estado', ['en_confirmaciones', 'programado'])
                 ->when($escuelasIds->isNotEmpty(), function($query) use ($escuelasIds) {
                     return $query->whereIn('escuela_id', $escuelasIds);
                 })
