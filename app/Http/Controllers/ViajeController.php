@@ -696,7 +696,16 @@ class ViajeController extends Controller
 
             $resultado = $disponibles->values();
             Log::info("viajesDisponibles - Retornando " . $resultado->count() . " viajes");
-            
+
+            // Si se solicita modo debug (ej: /api/viajes/disponibles?debug=1)
+            // incluimos en la respuesta un campo `debug` con detalles útiles
+            if ($request->boolean('debug')) {
+                return response()->json([
+                    'data' => $resultado,
+                    'debug' => $debugArr ?? []
+                ], 200);
+            }
+
             return response()->json($resultado, 200);
             
         } catch (\Exception $e) {
